@@ -6,6 +6,18 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		614C5A422F4DD5E900AE3FF7 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 614C5A232F4DD5C000AE3FF7 /* WidgetKit.framework */; };
+		614C5A432F4DD5E900AE3FF7 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 614C5A252F4DD5C000AE3FF7 /* SwiftUI.framework */; };
+		614C5A502F4DD5EB00AE3FF7 /* WorkoutSaduWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 614C5A412F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		61C5CB012F4B70B60072394A /* FirebaseAI in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB002F4B70B60072394A /* FirebaseAI */; };
+		61C5CB032F4B70B60072394A /* FirebaseAILogic in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB022F4B70B60072394A /* FirebaseAILogic */; };
+		61C5CB052F4B70B60072394A /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB042F4B70B60072394A /* FirebaseAnalytics */; };
+		61C5CB072F4B70B60072394A /* FirebaseAnalyticsCore in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB062F4B70B60072394A /* FirebaseAnalyticsCore */; };
+		61C5CB092F4B70B60072394A /* FirebaseAnalyticsIdentitySupport in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB082F4B70B60072394A /* FirebaseAnalyticsIdentitySupport */; };
+		61C5CB0C2F4B75A70072394A /* GoogleGenerativeAI in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB0B2F4B75A70072394A /* GoogleGenerativeAI */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		6142BEED2F323E090079F840 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,13 +33,48 @@
 			remoteGlobalIDString = 6142BED92F323E070079F840;
 			remoteInfo = WorkoutSadu;
 		};
+		614C5A4E2F4DD5EB00AE3FF7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6142BED22F323E070079F840 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 614C5A402F4DD5E900AE3FF7;
+			remoteInfo = WorkoutSaduWidgetExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		614C5A3C2F4DD5C200AE3FF7 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				614C5A502F4DD5EB00AE3FF7 /* WorkoutSaduWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		6142BEDA2F323E070079F840 /* WorkoutSadu.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WorkoutSadu.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6142BEEC2F323E090079F840 /* WorkoutSaduTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WorkoutSaduTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6142BEF62F323E0A0079F840 /* WorkoutSaduUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WorkoutSaduUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		614C5A232F4DD5C000AE3FF7 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		614C5A252F4DD5C000AE3FF7 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		614C5A412F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WorkoutSaduWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		614C5A592F4DD60700AE3FF7 /* WorkoutSaduWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WorkoutSaduWidgetExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		614C5A512F4DD5EB00AE3FF7 /* Exceptions for "WorkoutSaduWidget" folder in "WorkoutSaduWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 614C5A402F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		6142BEDC2F323E070079F840 /* WorkoutSadu */ = {
@@ -45,6 +92,14 @@
 			path = WorkoutSaduUITests;
 			sourceTree = "<group>";
 		};
+		614C5A442F4DD5E900AE3FF7 /* WorkoutSaduWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				614C5A512F4DD5EB00AE3FF7 /* Exceptions for "WorkoutSaduWidget" folder in "WorkoutSaduWidgetExtension" target */,
+			);
+			path = WorkoutSaduWidget;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -52,6 +107,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				61C5CB032F4B70B60072394A /* FirebaseAILogic in Frameworks */,
+				61C5CB092F4B70B60072394A /* FirebaseAnalyticsIdentitySupport in Frameworks */,
+				61C5CB012F4B70B60072394A /* FirebaseAI in Frameworks */,
+				61C5CB0C2F4B75A70072394A /* GoogleGenerativeAI in Frameworks */,
+				61C5CB052F4B70B60072394A /* FirebaseAnalytics in Frameworks */,
+				61C5CB072F4B70B60072394A /* FirebaseAnalyticsCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -69,15 +130,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		614C5A3E2F4DD5E900AE3FF7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				614C5A432F4DD5E900AE3FF7 /* SwiftUI.framework in Frameworks */,
+				614C5A422F4DD5E900AE3FF7 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		6142BED12F323E070079F840 = {
 			isa = PBXGroup;
 			children = (
+				614C5A592F4DD60700AE3FF7 /* WorkoutSaduWidgetExtension.entitlements */,
 				6142BEDC2F323E070079F840 /* WorkoutSadu */,
 				6142BEEF2F323E090079F840 /* WorkoutSaduTests */,
 				6142BEF92F323E0A0079F840 /* WorkoutSaduUITests */,
+				614C5A442F4DD5E900AE3FF7 /* WorkoutSaduWidget */,
+				614C5A222F4DD5C000AE3FF7 /* Frameworks */,
 				6142BEDB2F323E070079F840 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,8 +161,18 @@
 				6142BEDA2F323E070079F840 /* WorkoutSadu.app */,
 				6142BEEC2F323E090079F840 /* WorkoutSaduTests.xctest */,
 				6142BEF62F323E0A0079F840 /* WorkoutSaduUITests.xctest */,
+				614C5A412F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		614C5A222F4DD5C000AE3FF7 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				614C5A232F4DD5C000AE3FF7 /* WidgetKit.framework */,
+				614C5A252F4DD5C000AE3FF7 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -102,16 +185,24 @@
 				6142BED62F323E070079F840 /* Sources */,
 				6142BED72F323E070079F840 /* Frameworks */,
 				6142BED82F323E070079F840 /* Resources */,
+				614C5A3C2F4DD5C200AE3FF7 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				614C5A4F2F4DD5EB00AE3FF7 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				6142BEDC2F323E070079F840 /* WorkoutSadu */,
 			);
 			name = WorkoutSadu;
 			packageProductDependencies = (
+				61C5CB002F4B70B60072394A /* FirebaseAI */,
+				61C5CB022F4B70B60072394A /* FirebaseAILogic */,
+				61C5CB042F4B70B60072394A /* FirebaseAnalytics */,
+				61C5CB062F4B70B60072394A /* FirebaseAnalyticsCore */,
+				61C5CB082F4B70B60072394A /* FirebaseAnalyticsIdentitySupport */,
+				61C5CB0B2F4B75A70072394A /* GoogleGenerativeAI */,
 			);
 			productName = WorkoutSadu;
 			productReference = 6142BEDA2F323E070079F840 /* WorkoutSadu.app */;
@@ -163,6 +254,28 @@
 			productReference = 6142BEF62F323E0A0079F840 /* WorkoutSaduUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		614C5A402F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 614C5A522F4DD5EB00AE3FF7 /* Build configuration list for PBXNativeTarget "WorkoutSaduWidgetExtension" */;
+			buildPhases = (
+				614C5A3D2F4DD5E900AE3FF7 /* Sources */,
+				614C5A3E2F4DD5E900AE3FF7 /* Frameworks */,
+				614C5A3F2F4DD5E900AE3FF7 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				614C5A442F4DD5E900AE3FF7 /* WorkoutSaduWidget */,
+			);
+			name = WorkoutSaduWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = WorkoutSaduWidgetExtension;
+			productReference = 614C5A412F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -184,6 +297,9 @@
 						CreatedOnToolsVersion = 26.1;
 						TestTargetID = 6142BED92F323E070079F840;
 					};
+					614C5A402F4DD5E900AE3FF7 = {
+						CreatedOnToolsVersion = 26.1;
+					};
 				};
 			};
 			buildConfigurationList = 6142BED52F323E070079F840 /* Build configuration list for PBXProject "WorkoutSadu" */;
@@ -195,6 +311,10 @@
 			);
 			mainGroup = 6142BED12F323E070079F840;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				61C5CAFF2F4B70B60072394A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				61C5CB0A2F4B75A70072394A /* XCRemoteSwiftPackageReference "generative-ai-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 6142BEDB2F323E070079F840 /* Products */;
 			projectDirPath = "";
@@ -203,6 +323,7 @@
 				6142BED92F323E070079F840 /* WorkoutSadu */,
 				6142BEEB2F323E090079F840 /* WorkoutSaduTests */,
 				6142BEF52F323E0A0079F840 /* WorkoutSaduUITests */,
+				614C5A402F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -223,6 +344,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		6142BEF42F323E0A0079F840 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		614C5A3F2F4DD5E900AE3FF7 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -253,6 +381,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		614C5A3D2F4DD5E900AE3FF7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -265,6 +400,11 @@
 			isa = PBXTargetDependency;
 			target = 6142BED92F323E070079F840 /* WorkoutSadu */;
 			targetProxy = 6142BEF72F323E0A0079F840 /* PBXContainerItemProxy */;
+		};
+		614C5A4F2F4DD5EB00AE3FF7 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 614C5A402F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension */;
+			targetProxy = 614C5A4E2F4DD5EB00AE3FF7 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -395,11 +535,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = WorkoutSadu/WorkoutSadu.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8PRZ5T6DB3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "App uses camera to attach exercise photos";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -410,7 +552,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "-23.WorkoutSadu";
+				PRODUCT_BUNDLE_IDENTIFIER = com.saduwka.Workout;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -427,11 +569,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = WorkoutSadu/WorkoutSadu.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8PRZ5T6DB3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "App uses camera to attach exercise photos";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -442,7 +586,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "-23.WorkoutSadu";
+				PRODUCT_BUNDLE_IDENTIFIER = com.saduwka.Workout;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -538,6 +682,68 @@
 			};
 			name = Release;
 		};
+		614C5A532F4DD5EB00AE3FF7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = WorkoutSaduWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8PRZ5T6DB3;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WorkoutSaduWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WorkoutSaduWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.saduwka.Workout.WorkoutSaduWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		614C5A542F4DD5EB00AE3FF7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = WorkoutSaduWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8PRZ5T6DB3;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WorkoutSaduWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WorkoutSaduWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.saduwka.Workout.WorkoutSaduWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -577,7 +783,68 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		614C5A522F4DD5EB00AE3FF7 /* Build configuration list for PBXNativeTarget "WorkoutSaduWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				614C5A532F4DD5EB00AE3FF7 /* Debug */,
+				614C5A542F4DD5EB00AE3FF7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		61C5CAFF2F4B70B60072394A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.9.0;
+			};
+		};
+		61C5CB0A2F4B75A70072394A /* XCRemoteSwiftPackageReference "generative-ai-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/generative-ai-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.5.6;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		61C5CB002F4B70B60072394A /* FirebaseAI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 61C5CAFF2F4B70B60072394A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAI;
+		};
+		61C5CB022F4B70B60072394A /* FirebaseAILogic */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 61C5CAFF2F4B70B60072394A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAILogic;
+		};
+		61C5CB042F4B70B60072394A /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 61C5CAFF2F4B70B60072394A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		61C5CB062F4B70B60072394A /* FirebaseAnalyticsCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 61C5CAFF2F4B70B60072394A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsCore;
+		};
+		61C5CB082F4B70B60072394A /* FirebaseAnalyticsIdentitySupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 61C5CAFF2F4B70B60072394A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsIdentitySupport;
+		};
+		61C5CB0B2F4B75A70072394A /* GoogleGenerativeAI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 61C5CB0A2F4B75A70072394A /* XCRemoteSwiftPackageReference "generative-ai-swift" */;
+			productName = GoogleGenerativeAI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 6142BED22F323E070079F840 /* Project object */;
 }
