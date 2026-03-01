@@ -6,6 +6,7 @@ import UIKit
 struct WorkoutDetailView: View {
     @Bindable var workout: Workout
     @Environment(\.modelContext) private var context
+    @Query private var profiles: [BodyProfile]
     @State private var shareURL: URL?
     @State private var showTemplateSaved = false
 
@@ -58,6 +59,11 @@ struct WorkoutDetailView: View {
                             if let dur = workout.durationFormatted {
                                 Label(dur, systemImage: "clock")
                                     .foregroundStyle(Color(hex: "#ff5c3a"))
+                            }
+                            let kcal = CalorieCalculator.burned(workout: workout, profile: profiles.first)
+                            if kcal > 0 {
+                                Label("\(kcal) ккал", systemImage: "flame.fill")
+                                    .foregroundStyle(Color(hex: "#ffb830"))
                             }
                         }
                         .font(.system(size: 12))

@@ -122,7 +122,7 @@ struct WorkoutApp: App {
             Workout.self, WorkoutExercise.self, Exercise.self,
             WorkoutSet.self, BodyProfile.self, WorkoutTemplate.self,
             TemplateExercise.self, WeightEntry.self, GymBroChat.self,
-            PersistedMessage.self, GeneratedQuest.self
+            PersistedMessage.self, GeneratedQuest.self, MealEntry.self
         ])
     }
 }
