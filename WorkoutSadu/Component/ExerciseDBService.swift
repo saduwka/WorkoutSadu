@@ -17,8 +17,14 @@ struct ExerciseDBItem: Identifiable, Decodable {
 final class ExerciseDBService {
     static let shared = ExerciseDBService()
 
-    // ← Вставь свой API-ключ от RapidAPI сюда
-    static var apiKey: String = "a6ae048f29msh4082b47d999bc49p1e1985jsn29847a566322"
+    static var apiKey: String = {
+        guard let path = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
+              let dict = NSDictionary(contentsOfFile: path),
+              let key = dict["RAPIDAPI_KEY"] as? String else {
+            return ""
+        }
+        return key
+    }()
 
     private let host = "exercisedb.p.rapidapi.com"
     private let baseURL = "https://exercisedb.p.rapidapi.com"
@@ -31,7 +37,6 @@ final class ExerciseDBService {
         let url = URL(string: "\(baseURL)/exercises/name/\(encoded)?offset=0&limit=20")!
 
         print("[ExerciseDB] 🔍 Search: \(url.absoluteString)")
-        print("[ExerciseDB] 🔑 API Key: \(Self.apiKey.prefix(8))...")
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"

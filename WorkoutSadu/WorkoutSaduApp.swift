@@ -13,7 +13,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 }
 
 extension Notification.Name {
-    static let openGymBroChat = Notification.Name("openGymBroChat")
+    static let openGymBroChat = Notification.Name("openLifeBroChat")
 }
 
 class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
@@ -54,8 +54,6 @@ struct WidgetSyncModifier: ViewModifier {
 struct WorkoutApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @State private var selectedTab = 0
-    @State private var workoutFromTemplate: Workout?
-    @State private var showCreateFromTemplate = false
     @State private var gymBroManager = GymBroManager()
 
     init() {
@@ -88,28 +86,25 @@ struct WorkoutApp: App {
         WindowGroup {
             ZStack(alignment: .bottomTrailing) {
                 TabView(selection: $selectedTab) {
-                    WorkoutListView(
-                        externalWorkout: $workoutFromTemplate,
-                        showExternalWorkout: $showCreateFromTemplate
-                    )
-                    .tabItem { Label("Тренировки", systemImage: "dumbbell.fill") }
-                    .tag(0)
+                    TodayView()
+                        .tabItem { Label("Сегодня", systemImage: "sun.max.fill") }
+                        .tag(0)
 
-                    TemplateListView(onStartWorkout: { workout in
-                        workoutFromTemplate = workout
-                        showCreateFromTemplate = true
-                        selectedTab = 0
-                    })
-                    .tabItem { Label("Шаблоны", systemImage: "doc.on.doc") }
-                    .tag(1)
+                    HealthTabView()
+                        .tabItem { Label("Здоровье", systemImage: "heart.fill") }
+                        .tag(1)
 
-                    StatsView()
-                        .tabItem { Label("Прогресс", systemImage: "chart.line.uptrend.xyaxis") }
+                    TasksTabView()
+                        .tabItem { Label("Задачи", systemImage: "checklist") }
                         .tag(2)
 
-                    BodyProfileView()
-                        .tabItem { Label("Профиль", systemImage: "person.fill") }
+                    FinanceView()
+                        .tabItem { Label("Деньги", systemImage: "banknote.fill") }
                         .tag(3)
+
+                    MeTabView()
+                        .tabItem { Label("Я", systemImage: "person.fill") }
+                        .tag(4)
                 }
                 .preferredColorScheme(.dark)
 
@@ -122,7 +117,9 @@ struct WorkoutApp: App {
             Workout.self, WorkoutExercise.self, Exercise.self,
             WorkoutSet.self, BodyProfile.self, WorkoutTemplate.self,
             TemplateExercise.self, WeightEntry.self, GymBroChat.self,
-            PersistedMessage.self, GeneratedQuest.self, MealEntry.self
+            PersistedMessage.self, GeneratedQuest.self, MealEntry.self,
+            FinanceTransaction.self, FinanceAccount.self,
+            Habit.self, HabitEntry.self, TodoItem.self, WeeklyGoal.self
         ])
     }
 }

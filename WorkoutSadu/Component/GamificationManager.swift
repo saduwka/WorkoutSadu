@@ -212,7 +212,7 @@ struct GamificationManager {
 
     // MARK: - Quest Progress Computation
 
-    static func questProgress(targetType: String, targetValue: Double, workouts: [Workout]) -> (current: Double, label: String) {
+    static func questProgress(targetType: String, targetValue: Double, workouts: [Workout], context: ModelContext? = nil) -> (current: Double, label: String) {
         let weekStart = thisWeekStart()
         let weekWorks = workouts.filter { $0.finishedAt != nil && $0.date >= weekStart }
         let allSets = weekWorks.flatMap { $0.workoutExercises }.flatMap { $0.workoutSets }.filter { $0.isCompleted }
@@ -244,6 +244,33 @@ struct GamificationManager {
                 .map { $0.exercise.name })
             let c = Double(exs.count)
             return (c, "\(Int(c)) из \(Int(targetValue)) упражнений")
+
+        case "habits_streak":
+            guard let ctx = context,
+                  let habits = try? ctx.fetch(FetchDescriptor<Habit>(predicate: #Predicate { !$0.archived })),
+                  !habits.isEmpty else { return (0, "0 из \(Int(targetValue)) дн.") }
+            let minStreak = habits.map { $0.streak() }.min() ?? 0
+            return (Double(minStreak), "\(minStreak) из \(Int(targetValue)) дн.")
+
+        case "habits_completed":
+            guard let ctx = context,
+                  let habits = try? ctx.fetch(FetchDescriptor<Habit>(predicate: #Predicate { !$0.archived })),
+                  !habits.isEmpty else { return (0, "0 из \(Int(targetValue)) дн.") }
+            let cal = Calendar.current
+            var daysCompleted = 0
+            for dayOffset in 0..<7 {
+                let day = cal.date(byAdding: .day, value: -dayOffset, to: Date()) ?? Date()
+                if day >= weekStart && habits.allSatisfy({ $0.isCompleted(on: day) }) {
+                    daysCompleted += 1
+                }
+            }
+            return (Double(daysCompleted), "\(daysCompleted) из \(Int(targetValue)) дн.")
+
+        case "todos_done":
+            guard let ctx = context,
+                  let todos = try? ctx.fetch(FetchDescriptor<TodoItem>()) else { return (0, "0 из \(Int(targetValue)) задач") }
+            let done = todos.filter { $0.completed && $0.createdAt >= weekStart }.count
+            return (Double(done), "\(done) из \(Int(targetValue)) задач")
 
         default:
             if targetType.hasPrefix("bodypart:") {
@@ -300,8 +327,21 @@ struct GamificationManager {
             if !parts.isEmpty { profileStr = parts.joined(separator: ", ") }
         }
 
+        // Fetch life data for quests
+        var habitsInfo = ""
+        var todosInfo = ""
+        if let habits = try? context.fetch(FetchDescriptor<Habit>(predicate: #Predicate { !$0.archived })), !habits.isEmpty {
+            let names = habits.map { $0.name }.joined(separator: ", ")
+            let avgStreak = habits.map { $0.streak() }.reduce(0, +) / max(1, habits.count)
+            habitsInfo = "Привычки: \(names). Средняя серия: \(avgStreak) дн."
+        }
+        if let todos = try? context.fetch(FetchDescriptor<TodoItem>()) {
+            let pending = todos.filter { !$0.completed }.count
+            todosInfo = "Невыполненных задач: \(pending)"
+        }
+
         let prompt = """
-        Ты фитнес-тренер. Сгенерируй 5 недельных квестов для пользователя.
+        Ты лайф-коуч. Сгенерируй 6 недельных квестов для пользователя — по тренировкам, привычкам и задачам.
 
         Профиль: \(profileStr)
         Тренировок в неделю: \(String(format: "%.1f", avgPerWeek))
@@ -309,21 +349,26 @@ struct GamificationManager {
         Среднее подходов за тренировку: \(avgSetsPerWorkout)
         Слабая группа: \(weakMuscle)
         Сильная группа: \(strongMuscle)
+        \(habitsInfo)
+        \(todosInfo)
 
         Допустимые targetType:
         - "workouts" — количество тренировок
         - "total_sets" — общее количество подходов
         - "total_volume" — суммарный объём в кг (вес × повторения)
-        - "unique_muscles" — количество уникальных групп мышц (макс 7: Грудь, Спина, Ноги, Плечи, Руки, Пресс, Кардио)
+        - "unique_muscles" — количество уникальных групп мышц
         - "unique_exercises" — количество уникальных упражнений
         - "bodypart:ГРУППА" — подходы на конкретную группу (например "bodypart:Ноги")
+        - "habits_streak" — дней подряд без пропуска привычек (все привычки)
+        - "habits_completed" — количество дней, когда все привычки выполнены
+        - "todos_done" — количество закрытых задач
 
         Допустимые цвета: #ff5c3a, #5b8cff, #a855f7, #ffb830, #3aff9e
 
         Правила:
-        - Квесты должны быть реалистичными на основе текущей активности пользователя.
-        - Один квест на слабую группу мышц.
-        - targetValue — число (целое для подходов/тренировок, с плавающей точкой для объёма).
+        - 3-4 квеста по тренировкам, 1-2 по привычкам, 1 по задачам.
+        - Квесты реалистичные на основе текущей активности.
+        - targetValue — число.
         - XP от 50 до 200 в зависимости от сложности.
         - Иконки — один эмодзи.
         - Ответ ТОЛЬКО JSON, без текста.
@@ -349,7 +394,7 @@ struct GamificationManager {
             let decoded = try JSONDecoder().decode(QuestListJSON.self, from: data)
 
             await MainActor.run {
-                for (i, q) in decoded.quests.prefix(5).enumerated() {
+                for (i, q) in decoded.quests.prefix(6).enumerated() {
                     let quest = GeneratedQuest(
                         weekId: weekId,
                         title: q.title,
@@ -402,7 +447,8 @@ struct GamificationManager {
             ("🔁", "Набери \(setsGoal) подходов", "Выполни \(setsGoal) подходов за неделю", "#a855f7", 100, "total_sets", Double(setsGoal)),
             ("🏋️", "Объём \(String(format: "%.0f", volGoal)) кг", "Суммарный тоннаж за неделю", "#ffb830", 150, "total_volume", volGoal),
             ("💪", "Прокачай \(weakMuscle.lowercased())", "Минимум 8 подходов на \(weakMuscle.lowercased())", "#ff5c3a", 120, "bodypart:\(weakMuscle)", 8),
-            ("🎯", "Разнообразие", "Выполни 6 разных упражнений", "#3aff9e", 90, "unique_exercises", 6),
+            ("🔗", "Серия привычек", "Не пропускай привычки 5 дней подряд", "#3aff9e", 100, "habits_streak", 5),
+            ("✅", "Закрой задачи", "Выполни 5 задач за неделю", "#5b8cff", 80, "todos_done", 5),
         ]
         for (i, q) in fallback.enumerated() {
             context.insert(GeneratedQuest(weekId: weekId, title: q.1, subtitle: q.2, icon: q.0, colorHex: q.3, xp: q.4, targetType: q.5, targetValue: q.6, order: i))

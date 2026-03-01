@@ -201,6 +201,7 @@ struct TemplateDetailView: View {
                 .padding(16)
                 .padding(.bottom, 90)
             }
+            .scrollDismissesKeyboard(.interactively)
 
             VStack {
                 Spacer()

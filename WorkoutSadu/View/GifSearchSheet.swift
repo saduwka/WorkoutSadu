@@ -141,6 +141,7 @@ struct GifSearchSheet: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 40)
         }
+        .scrollDismissesKeyboard(.interactively)
     }
 
     private func resultRow(_ item: ExerciseDBItem) -> some View {

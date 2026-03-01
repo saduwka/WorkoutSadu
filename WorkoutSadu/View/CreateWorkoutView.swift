@@ -127,6 +127,7 @@ struct CreateWorkoutView: View {
                     .padding(16)
                     .padding(.bottom, 40)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle(name.isEmpty ? "Новая тренировка" : name)
             .navigationBarTitleDisplayMode(.inline)

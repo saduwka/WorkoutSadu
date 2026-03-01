@@ -51,16 +51,18 @@ struct GymBroMessage: Identifiable {
     let role: Role
     let text: String
     let template: PendingTemplate?
+    let lifeAction: PendingLifeAction?
     let timestamp: Date
     let isSetComment: Bool
 
     enum Role { case ai, user }
 
-    init(id: UUID = UUID(), role: Role, text: String, template: PendingTemplate? = nil, isSetComment: Bool = false) {
+    init(id: UUID = UUID(), role: Role, text: String, template: PendingTemplate? = nil, lifeAction: PendingLifeAction? = nil, isSetComment: Bool = false) {
         self.id = id
         self.role = role
         self.text = text
         self.template = template
+        self.lifeAction = lifeAction
         self.timestamp = Date()
         self.isSetComment = isSetComment
     }
@@ -89,6 +91,37 @@ struct PendingExercise {
     let reps: Int
     let weight: Double
     let timerSeconds: Int?
+}
+
+// MARK: - Pending Life Action (parsed from AI response)
+
+struct PendingLifeAction: Identifiable {
+    let id = UUID()
+    let habits: [PendingHabit]
+    let todos: [PendingTodo]
+    let goals: [PendingGoal]
+    var isSaved = false
+
+    var isEmpty: Bool { habits.isEmpty && todos.isEmpty && goals.isEmpty }
+    var itemCount: Int { habits.count + todos.count + goals.count }
+}
+
+struct PendingHabit {
+    let name: String
+    let icon: String
+    let colorHex: String
+    let todos: [String]
+}
+
+struct PendingTodo {
+    let title: String
+    let priority: Int
+}
+
+struct PendingGoal {
+    let title: String
+    let targetCount: Int
+    let period: String
 }
 
 // MARK: - Insight Chip
@@ -279,7 +312,7 @@ final class GymBroManager {
             if isPR { context += "\nЭто НОВЫЙ РЕКОРД!" }
 
             let prompt = """
-            Ты Gym Bro — дерзкий мотивирующий друг из зала.
+            Ты Life Bro — дерзкий мотивирующий лайф-коуч.
             \(context)
 
             Дай ОДНО короткое предложение (максимум 15 слов). Правила:
@@ -310,7 +343,7 @@ final class GymBroManager {
 
     private func sendSetCommentNotification(comment: String) {
         let content = UNMutableNotificationContent()
-        content.title = "Gym Bro 💬"
+        content.title = "Life Bro 💬"
         content.body = comment
         content.sound = .default
         content.userInfo = ["type": "gymBroComment"]
@@ -446,8 +479,8 @@ final class GymBroManager {
             await MainActor.run {
                 isLoading = false
                 if let text = response.text?.trimmingCharacters(in: .whitespacesAndNewlines) {
-                    let (cleanText, template) = parseResponse(text)
-                    let aiMsg = GymBroMessage(role: .ai, text: cleanText, template: template)
+                    let (cleanText, template, lifeAction) = parseResponse(text)
+                    let aiMsg = GymBroMessage(role: .ai, text: cleanText, template: template, lifeAction: lifeAction)
                     messages.append(aiMsg)
                     persistMessage(aiMsg)
                 } else if errorMessage == nil {
@@ -487,8 +520,8 @@ final class GymBroManager {
             await MainActor.run {
                 isLoading = false
                 if let text = response.text?.trimmingCharacters(in: .whitespacesAndNewlines) {
-                    let (cleanText, template) = parseResponse(text)
-                    let aiMsg = GymBroMessage(role: .ai, text: cleanText, template: template)
+                    let (cleanText, template, lifeAction) = parseResponse(text)
+                    let aiMsg = GymBroMessage(role: .ai, text: cleanText, template: template, lifeAction: lifeAction)
                     messages.append(aiMsg)
                     persistMessage(aiMsg)
                 } else if errorMessage == nil {
@@ -544,7 +577,7 @@ final class GymBroManager {
 
     // MARK: - Parse response for template JSON
 
-    private func parseResponse(_ raw: String) -> (text: String, template: PendingTemplate?) {
+    private func parseResponse(_ raw: String) -> (text: String, template: PendingTemplate?, lifeAction: PendingLifeAction?) {
         if let jsonStart = raw.range(of: "```json"),
            let jsonEnd = raw.range(of: "```", range: jsonStart.upperBound..<raw.endIndex) {
             let jsonStr = String(raw[jsonStart.upperBound..<jsonEnd.lowerBound])
@@ -552,7 +585,21 @@ final class GymBroManager {
             let removeEnd = min(jsonEnd.upperBound, raw.endIndex)
             let cleanText = String(raw[raw.startIndex..<jsonStart.lowerBound] + raw[removeEnd..<raw.endIndex])
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            return (cleanText, decodeTemplate(jsonStr))
+
+            if jsonStr.contains("\"life_action\"") {
+                return (cleanText, nil, decodeLifeAction(jsonStr))
+            }
+            return (cleanText, decodeTemplate(jsonStr), nil)
+        }
+
+        if let jsonStart2 = raw.range(of: "{\"life_action\"") {
+            let substring = raw[jsonStart2.lowerBound...]
+            if let endIdx = findMatchingBrace(in: substring) {
+                let jsonStr = String(raw[jsonStart2.lowerBound...endIdx])
+                let cleanText = raw.replacingOccurrences(of: jsonStr, with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return (cleanText, nil, decodeLifeAction(jsonStr))
+            }
         }
 
         if let jsonStart2 = raw.range(of: "{\"template\"") {
@@ -561,11 +608,11 @@ final class GymBroManager {
                 let jsonStr = String(raw[jsonStart2.lowerBound...endIdx])
                 let cleanText = raw.replacingOccurrences(of: jsonStr, with: "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                return (cleanText, decodeTemplate(jsonStr))
+                return (cleanText, decodeTemplate(jsonStr), nil)
             }
         }
 
-        return (raw, nil)
+        return (raw, nil, nil)
     }
 
     private func findMatchingBrace(in str: Substring) -> String.Index? {
@@ -624,6 +671,60 @@ final class GymBroManager {
         } catch {
             print("GymBro template parse error: \(error)")
             return nil
+        }
+    }
+
+    private func decodeLifeAction(_ jsonStr: String) -> PendingLifeAction? {
+        guard let data = jsonStr.data(using: .utf8) else { return nil }
+
+        struct LifeActionJSON: Decodable {
+            let life_action: LifeActionBody
+        }
+        struct LifeActionBody: Decodable {
+            let habits: [HabitJSON]?
+            let todos: [TodoJSON]?
+            let goals: [GoalJSON]?
+        }
+        struct HabitJSON: Decodable {
+            let name: String
+            let icon: String?
+            let colorHex: String?
+            let todos: [String]?
+        }
+        struct TodoJSON: Decodable {
+            let title: String
+            let priority: Int?
+        }
+        struct GoalJSON: Decodable {
+            let title: String
+            let targetCount: Int?
+            let period: String?
+        }
+
+        do {
+            let decoded = try JSONDecoder().decode(LifeActionJSON.self, from: data)
+            let habits = (decoded.life_action.habits ?? []).map {
+                PendingHabit(name: $0.name, icon: $0.icon ?? "checkmark.circle", colorHex: $0.colorHex ?? "#ff5c3a", todos: $0.todos ?? [])
+            }
+            let todos = (decoded.life_action.todos ?? []).map {
+                PendingTodo(title: $0.title, priority: $0.priority ?? 0)
+            }
+            let goals = (decoded.life_action.goals ?? []).map {
+                PendingGoal(title: $0.title, targetCount: $0.targetCount ?? 1, period: $0.period ?? "week")
+            }
+            let action = PendingLifeAction(habits: habits, todos: todos, goals: goals)
+            return action.isEmpty ? nil : action
+        } catch {
+            print("LifeBro life_action parse error: \(error)")
+            return nil
+        }
+    }
+
+    func markLifeActionSaved(messageId: UUID) {
+        if let idx = messages.firstIndex(where: { $0.id == messageId }),
+           var action = messages[idx].lifeAction {
+            action.isSaved = true
+            messages[idx] = GymBroMessage(id: messageId, role: .ai, text: messages[idx].text, lifeAction: action)
         }
     }
 
@@ -695,6 +796,30 @@ final class GymBroManager {
         return instructions
     }
 
+    private func lifeActionInstructions() -> String {
+        return """
+        СОЗДАНИЕ ПРИВЫЧЕК / ЗАДАЧ / ЦЕЛЕЙ:
+
+        Когда пользователь просит создать привычку, задачу или цель — верни JSON:
+        ```json
+        {"life_action":{"habits":[{"name":"Название","icon":"figure.run","colorHex":"#ff5c3a","todos":["Подзадача 1","Подзадача 2"]}],"todos":[{"title":"Задача","priority":1}],"goals":[{"title":"Цель","targetCount":5,"period":"week"}]}}
+        ```
+
+        Правила:
+        - Можно создавать одновременно несколько: привычки + задачи + цели.
+        - Пустые массивы можно не указывать.
+        - У привычки может быть массив todos — конкретные шаги/подзадачи. Когда все подзадачи выполнены, привычка автоматически отмечается как выполненная. Если привычка простая (без шагов) — не указывай todos.
+        - Пример: "Создай привычку романтика жене" → привычка с подзадачами: ["Купить цветы", "Написать записку", "Организовать свидание"].
+        - icon — название SF Symbol (например: figure.run, drop.fill, book.fill, bed.double.fill, moon.fill, heart.fill, leaf.fill).
+        - colorHex: #ff5c3a, #5b8cff, #a855f7, #ffb830, #3aff9e, #ff6b9d.
+        - priority для задач: 0 = обычная, 1 = средняя, 2 = высокая.
+        - targetCount для целей — количество раз за период.
+        - period для целей: "week" (неделя), "month" (месяц), "year" (год). По умолчанию "week".
+        - Перед JSON объясни что создаёшь и зачем.
+        - Если пользователь спрашивает совет по привычкам — предложи конкретные и верни JSON.
+        """
+    }
+
     private func templatesBlock(_ summary: WorkoutSummary) -> String {
         if summary.templates.isEmpty { return "Нет сохранённых шаблонов." }
         return summary.templates.map { t in
@@ -705,20 +830,63 @@ final class GymBroManager {
 
     private func compactSystemPrompt(summary: WorkoutSummary) -> String {
         return """
-        Ты Gym Bro — дружелюбный личный тренер в iOS-приложении.
-        Говори как знающий друг из зала: прямо, конкретно, с юмором.
-        Отвечай на том же языке что и пользователь.
+        Ты Life Bro — дружелюбный лайф-коуч в iOS-приложении LifeOS.
+        Ты знаешь про тренировки, финансы, привычки, задачи и цели пользователя.
+        Говори как знающий друг: прямо, конкретно, с юмором. Давай советы на стыке данных.
+        Например: если пользователь много тратит и мало тренируется — подмечай это.
+        Если серия привычек рвётся — мотивируй. Отвечай на том же языке что и пользователь.
         У тебя есть долгосрочная память — ты помнишь все прошлые разговоры с пользователем.
 
         ПРОФИЛЬ: \(profileBlock(summary))
 
-        СТАТИСТИКА (90 дней):
+        ТРЕНИРОВКИ (90 дней):
         \(statsBlock(summary))
 
-        СОХРАНЁННЫЕ ШАБЛОНЫ:
+        ПРИВЫЧКИ:
+        \(habitsBlock(summary))
+
+        ЗАДАЧИ:
+        \(todosBlock(summary))
+
+        ЦЕЛИ НЕДЕЛИ:
+        \(goalsBlock(summary))
+
+        ФИНАНСЫ:
+        \(financeBlock(summary))
+
+        ШАБЛОНЫ:
         \(templatesBlock(summary))
 
         \(templateInstructions(summary))
+
+        \(lifeActionInstructions())
+        """
+    }
+
+    private func habitsBlock(_ summary: WorkoutSummary) -> String {
+        guard !summary.habits.isEmpty else { return "Привычки не заведены." }
+        return summary.habits.map { h in
+            let status = h.completedToday ? "✅" : "❌"
+            return "\(status) \(h.name) — серия \(h.streak) дн."
+        }.joined(separator: "\n")
+    }
+
+    private func todosBlock(_ summary: WorkoutSummary) -> String {
+        return "Невыполненных задач: \(summary.pendingTodos). Выполнено сегодня: \(summary.completedTodosToday)."
+    }
+
+    private func goalsBlock(_ summary: WorkoutSummary) -> String {
+        guard !summary.weeklyGoals.isEmpty else { return "Целей на неделю нет." }
+        return summary.weeklyGoals.map { g in
+            "• \(g.title): \(g.current)/\(g.target)"
+        }.joined(separator: "\n")
+    }
+
+    private func financeBlock(_ summary: WorkoutSummary) -> String {
+        return """
+        Баланс: \(summary.financeBalance) ₸
+        Сегодня: расход \(summary.todayExpense), доход \(summary.todayIncome)
+        За месяц расходы: \(summary.monthExpense)
         """
     }
 
@@ -800,6 +968,43 @@ final class GymBroManager {
         }
         summary.knownExercises = knownExercises.sorted { $0.bodyPart < $1.bodyPart }
 
+        // Life data from modelContext
+        if let ctx = modelContext {
+            let today = Date()
+
+            if let habits = try? ctx.fetch(FetchDescriptor<Habit>(predicate: #Predicate { !$0.archived })) {
+                summary.habits = habits.map { h in
+                    (name: h.name, streak: h.streak(), completedToday: h.isCompleted(on: today))
+                }
+            }
+
+            if let todos = try? ctx.fetch(FetchDescriptor<TodoItem>()) {
+                summary.pendingTodos = todos.filter { !$0.completed }.count
+                summary.completedTodosToday = todos.filter { $0.completed && cal.isDateInToday($0.createdAt) }.count
+            }
+
+            if let goals = try? ctx.fetch(FetchDescriptor<WeeklyGoal>()) {
+                summary.weeklyGoals = goals.filter { $0.isCurrentWeek }.map {
+                    (title: $0.title, current: $0.currentCount, target: $0.targetCount)
+                }
+            }
+
+            if let accounts = try? ctx.fetch(FetchDescriptor<FinanceAccount>()),
+               let transactions = try? ctx.fetch(FetchDescriptor<FinanceTransaction>()) {
+                let monthAgo = cal.date(byAdding: .month, value: -1, to: today) ?? today
+                summary.financeBalance = accounts.reduce(0) { total, acc in
+                    let txs = transactions.filter { $0.accountID == acc.id }
+                    let inc = txs.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
+                    let exp = txs.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
+                    return total + acc.balance + inc - exp
+                }
+                let todayTx = transactions.filter { cal.isDateInToday($0.date) }
+                summary.todayExpense = todayTx.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
+                summary.todayIncome = todayTx.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
+                summary.monthExpense = transactions.filter { $0.date >= monthAgo && $0.type == .expense }.reduce(0) { $0 + $1.amount }
+            }
+        }
+
         return summary
     }
 
@@ -816,6 +1021,22 @@ final class GymBroManager {
         if summary.totalWorkouts > 10 {
             chips.append(GymBroInsight(icon: "📈", label: "Активность", value: "\(summary.totalWorkouts) трен.", severity: .good))
         }
+
+        let brokenStreaks = summary.habits.filter { !$0.completedToday && $0.streak == 0 }
+        if !brokenStreaks.isEmpty {
+            chips.append(GymBroInsight(icon: "🔗", label: "Привычки", value: "\(brokenStreaks.count) не выполн.", severity: .warn))
+        }
+        let maxStreak = summary.habits.map { $0.streak }.max() ?? 0
+        if maxStreak >= 7 {
+            chips.append(GymBroInsight(icon: "🔥", label: "Серия", value: "\(maxStreak) дн.", severity: .good))
+        }
+        if summary.pendingTodos > 5 {
+            chips.append(GymBroInsight(icon: "📋", label: "Задачи", value: "\(summary.pendingTodos) ожидают", severity: .warn))
+        }
+        if summary.financeBalance < 0 {
+            chips.append(GymBroInsight(icon: "💸", label: "Баланс", value: "отрицательный", severity: .alert))
+        }
+
         if chips.isEmpty {
             chips.append(GymBroInsight(icon: "🔥", label: "Анализ", value: "готов к работе", severity: .good))
         }
@@ -834,4 +1055,14 @@ private struct WorkoutSummary {
     var age: Int = 0
     var templates: [(id: UUID, name: String, exercises: [String])] = []
     var knownExercises: [(name: String, bodyPart: String)] = []
+
+    // Life data
+    var habits: [(name: String, streak: Int, completedToday: Bool)] = []
+    var pendingTodos: Int = 0
+    var completedTodosToday: Int = 0
+    var weeklyGoals: [(title: String, current: Int, target: Int)] = []
+    var financeBalance: Int = 0
+    var todayExpense: Int = 0
+    var todayIncome: Int = 0
+    var monthExpense: Int = 0
 }

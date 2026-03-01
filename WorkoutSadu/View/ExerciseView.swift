@@ -271,6 +271,7 @@ struct ExerciseView: View {
                 .padding(16)
                 .padding(.bottom, 40)
             }
+            .scrollDismissesKeyboard(.interactively)
 
             if showPRCelebration, let pr = prResult {
                 PRCelebrationView(result: pr) {

@@ -189,7 +189,7 @@ struct GymBroChatScreen: View {
                     .lineLimit(1)
                 HStack(spacing: 5) {
                     Circle().fill(Color(hex: "#1effa0")).frame(width: 6, height: 6)
-                    Text("Gym Bro · Gemini")
+                    Text("Life Bro · Gemini")
                         .font(.system(size: 10))
                         .foregroundStyle(Color(hex: "#55556a"))
                 }
@@ -290,6 +290,14 @@ struct GymBroChatScreen: View {
                                 if let template = msg.template {
                                     TemplateCard(
                                         template: template,
+                                        messageId: msg.id,
+                                        manager: manager
+                                    )
+                                    .padding(.horizontal, 14)
+                                }
+                                if let action = msg.lifeAction {
+                                    LifeActionCard(
+                                        action: action,
                                         messageId: msg.id,
                                         manager: manager
                                     )
@@ -1229,5 +1237,196 @@ struct AttachmentPickerSheet: View {
                     .foregroundStyle(.white)
             }
         }
+    }
+}
+
+// MARK: - Life Action Card
+
+struct LifeActionCard: View {
+    let action: PendingLifeAction
+    let messageId: UUID
+    var manager: GymBroManager
+    @Environment(\.modelContext) private var context
+    @State private var saved = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color(hex: "#a855f7"))
+
+                Text("Life Bro предлагает")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color(hex: "#a855f7"))
+                Spacer()
+                Text("\(action.itemCount) шт.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(hex: "#55556a"))
+            }
+
+            if !action.habits.isEmpty {
+                Text("ПРИВЫЧКИ")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color(hex: "#55556a"))
+                    .tracking(1)
+
+                ForEach(Array(action.habits.enumerated()), id: \.offset) { _, h in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Image(systemName: h.icon)
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color(hex: h.colorHex))
+                                .frame(width: 20)
+                            Text(h.name)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(Color(hex: "#eeeef5"))
+                            if !h.todos.isEmpty {
+                                Text("\(h.todos.count) шагов")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Color(hex: "#55556a"))
+                            }
+                        }
+                        if !h.todos.isEmpty {
+                            ForEach(Array(h.todos.enumerated()), id: \.offset) { _, todoTitle in
+                                HStack(spacing: 6) {
+                                    Image(systemName: "square")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Color(hex: h.colorHex).opacity(0.5))
+                                    Text(todoTitle)
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(Color(hex: "#9999aa"))
+                                }
+                                .padding(.leading, 28)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !action.todos.isEmpty {
+                Text("ЗАДАЧИ")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color(hex: "#55556a"))
+                    .tracking(1)
+
+                ForEach(Array(action.todos.enumerated()), id: \.offset) { _, t in
+                    HStack(spacing: 8) {
+                        Image(systemName: "circle")
+                            .font(.system(size: 12))
+                            .foregroundStyle(priorityColor(t.priority))
+                            .frame(width: 20)
+                        Text(t.title)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Color(hex: "#eeeef5"))
+                        if t.priority > 0 {
+                            Text(t.priority == 2 ? "!!!" : "!!")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(priorityColor(t.priority))
+                        }
+                    }
+                }
+            }
+
+            if !action.goals.isEmpty {
+                Text("ЦЕЛИ НЕДЕЛИ")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color(hex: "#55556a"))
+                    .tracking(1)
+
+                ForEach(Array(action.goals.enumerated()), id: \.offset) { _, g in
+                    HStack(spacing: 8) {
+                        Image(systemName: "target")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color(hex: "#ffb830"))
+                            .frame(width: 20)
+                        Text(g.title)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Color(hex: "#eeeef5"))
+                        Text((GoalPeriod(rawValue: g.period) ?? .week).label)
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(Color(hex: "#55556a"))
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color(hex: "#1a1a24"))
+                            .clipShape(Capsule())
+                        Spacer()
+                        Text("0/\(g.targetCount)")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Color(hex: "#55556a"))
+                    }
+                }
+            }
+
+            Divider().background(Color(hex: "#55556a").opacity(0.2))
+
+            if saved || action.isSaved {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color(hex: "#3aff9e"))
+                    Text("Сохранено")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#3aff9e"))
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+                Button {
+                    saveLifeAction()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 14))
+                        Text("Добавить")
+                            .font(.system(size: 13, weight: .bold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color(hex: "#a855f7"))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(hex: "#161620"))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Color(hex: "#a855f7").opacity(0.3), lineWidth: 1)
+                )
+        )
+    }
+
+    private func priorityColor(_ priority: Int) -> Color {
+        switch priority {
+        case 2: return Color(hex: "#ff5c3a")
+        case 1: return Color(hex: "#ffb830")
+        default: return Color(hex: "#5b8cff")
+        }
+    }
+
+    private func saveLifeAction() {
+        for h in action.habits {
+            let habit = Habit(name: h.name, icon: h.icon, colorHex: h.colorHex)
+            context.insert(habit)
+            for todoTitle in h.todos {
+                let todo = TodoItem(title: todoTitle)
+                todo.habit = habit
+                context.insert(todo)
+                habit.linkedTodos.append(todo)
+            }
+        }
+        for t in action.todos {
+            let todo = TodoItem(title: t.title, priority: t.priority)
+            context.insert(todo)
+        }
+        for g in action.goals {
+            let goal = WeeklyGoal(title: g.title, targetCount: g.targetCount, period: GoalPeriod(rawValue: g.period) ?? .week)
+            context.insert(goal)
+        }
+        try? context.save()
+        saved = true
+        manager.markLifeActionSaved(messageId: messageId)
     }
 }

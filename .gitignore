@@ -1,0 +1,28 @@
+# Xcode
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+xcuserdata/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Secrets
+WorkoutSadu/GoogleService-Info.plist
+WorkoutSadu/Secrets.plist
+
+# Archives
+*.zip
+*.ipa
+*.dSYM.zip
+
+# CocoaPods (if used)
+Pods/
+
+# SPM
+.build/
+Package.resolved

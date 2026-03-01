@@ -43,6 +43,7 @@ struct BodyProfileView: View {
                     .padding(16)
                     .padding(.bottom, 40)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle("ПРОФИЛЬ")
             .navigationBarTitleDisplayMode(.inline)
@@ -289,6 +290,7 @@ struct BodyProfileEditView: View {
                     }
                 }
                 .scrollContentBackground(.hidden)
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle("Редактировать")
             .navigationBarTitleDisplayMode(.inline)

@@ -33,6 +33,7 @@ struct AddMealView: View {
                     .padding(16)
                     .padding(.bottom, 40)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle("Добавить еду")
             .navigationBarTitleDisplayMode(.inline)

@@ -164,7 +164,8 @@ struct StatsView: View {
                     let progress = GamificationManager.questProgress(
                         targetType: quest.targetType,
                         targetValue: quest.targetValue,
-                        workouts: workouts
+                        workouts: workouts,
+                        context: context
                     )
                     let ratio = quest.targetValue > 0 ? min(1.0, progress.current / quest.targetValue) : 0
                     challengeCard(
@@ -198,7 +199,8 @@ struct StatsView: View {
             let progress = GamificationManager.questProgress(
                 targetType: quest.targetType,
                 targetValue: quest.targetValue,
-                workouts: workouts
+                workouts: workouts,
+                context: context
             )
             markQuestIfCompleted(quest, current: progress.current)
         }
