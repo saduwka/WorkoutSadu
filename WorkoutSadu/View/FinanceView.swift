@@ -63,15 +63,18 @@ struct FinanceOverviewView: View {
     @State private var showVoiceInput = false
     @State private var showReceiptCapture = false
     @State private var showAddAccount = false
+    @State private var showTransfer = false
     @State private var editingAccount: FinanceAccount?
+    @State private var pendingReceiptItem: PendingReceiptSheetItem?
 
     private var todayTransactions: [FinanceTransaction] {
         let cal = Calendar.current
         return allTransactions.filter { cal.isDateInToday($0.date) }
     }
 
-    private var todayIncome: Int { todayTransactions.filter { $0.type == .income }.reduce(0) { $0 + $1.amount } }
-    private var todayExpense: Int { todayTransactions.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount } }
+    /// Доходы/расходы без переводов между счетами — деньги остаются у пользователя.
+    private var todayIncome: Int { todayTransactions.filter { $0.type == .income && $0.category != .transfers }.reduce(0) { $0 + $1.amount } }
+    private var todayExpense: Int { todayTransactions.filter { $0.type == .expense && $0.category != .transfers }.reduce(0) { $0 + $1.amount } }
 
     private var totalBalance: Int {
         let accBal = accounts.reduce(0) { $0 + accountBalance($1) }
@@ -109,9 +112,83 @@ struct FinanceOverviewView: View {
             .sheet(isPresented: $showVoiceInput) { VoiceInputView() }
             .sheet(isPresented: $showReceiptCapture) { ReceiptCaptureView() }
             .sheet(isPresented: $showAddAccount) { AddAccountSheet() }
+            .sheet(isPresented: $showTransfer) { TransferBetweenAccountsSheet() }
             .sheet(item: $editingAccount) { acc in EditAccountSheet(account: acc) }
+            .sheet(item: $pendingReceiptItem) { item in
+                PendingReceiptSheet(transactions: item.transactions) {
+                    for p in item.transactions {
+                        let cat = FinanceCategory(rawValue: p.category) ?? .other
+                        let type = FinanceType(rawValue: p.type) ?? .expense
+                        let tx = FinanceTransaction(
+                            name: p.name,
+                            amount: p.amount,
+                            category: cat,
+                            type: type,
+                            date: p.date,
+                            accountID: nil
+                        )
+                        context.insert(tx)
+                    }
+                    try? context.save()
+                    PendingReceiptStorage.clear()
+                    pendingReceiptItem = nil
+                } onCancel: {
+                    PendingReceiptStorage.clear()
+                    pendingReceiptItem = nil
+                }
+            }
+            .onAppear { checkPendingReceipt() }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                checkPendingReceipt()
+            }
         }
         .preferredColorScheme(.dark)
+    }
+
+    private func checkPendingReceipt() {
+        // Уже подтвердили в Share Extension — сразу сохраняем в SwiftData без листа
+        if PendingReceiptStorage.wasConfirmedInExtension(), let list = PendingReceiptStorage.load(), !list.isEmpty {
+            for p in list {
+                let cat = FinanceCategory(rawValue: p.category) ?? .other
+                let type = FinanceType(rawValue: p.type) ?? .expense
+                let tx = FinanceTransaction(
+                    name: p.name,
+                    amount: p.amount,
+                    category: cat,
+                    type: type,
+                    date: p.date,
+                    accountID: nil
+                )
+                context.insert(tx)
+            }
+            try? context.save()
+            PendingReceiptStorage.clear()
+            return
+        }
+        if let list = PendingReceiptStorage.load(), !list.isEmpty {
+            pendingReceiptItem = PendingReceiptSheetItem(transactions: list)
+            return
+        }
+        guard let text = PendingReceiptStorage.loadPendingText(), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        Task { @MainActor in
+            do {
+                let entries = try await FinanceAIService.shared.parseReceipt(text: text)
+                PendingReceiptStorage.savePendingText("") // clear so we don't re-parse
+                let list = entries.map { e in
+                    PendingReceiptTransaction(
+                        name: e.name,
+                        amount: e.amount,
+                        category: e.category,
+                        type: e.type,
+                        date: e.date ?? Date()
+                    )
+                }
+                guard !list.isEmpty else { return }
+                pendingReceiptItem = PendingReceiptSheetItem(transactions: list)
+            } catch {
+                PendingReceiptStorage.savePendingText("")
+            }
+        }
     }
 
     // MARK: - Accounts
@@ -135,6 +212,27 @@ struct FinanceOverviewView: View {
 
             ForEach(accounts) { account in
                 accountCard(account)
+            }
+
+            if accounts.count >= 2 {
+                Button { showTransfer = true } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.left.arrow.right")
+                            .font(.system(size: 16))
+                        Text("Перевод между счетами")
+                            .font(.system(size: 14, weight: .medium))
+                    }
+                    .foregroundStyle(Color(hex: FinanceCategory.transfers.color))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color(hex: FinanceCategory.transfers.color).opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .strokeBorder(Color(hex: FinanceCategory.transfers.color).opacity(0.3), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
             }
 
             Button { showAddAccount = true } label: {
@@ -530,6 +628,330 @@ struct EditAccountSheet: View {
                 Button("Отмена", role: .cancel) {}
             } message: {
                 Text("Транзакции привязанные к этому счёту останутся, но потеряют привязку.")
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
+// MARK: - Transfer Between Accounts Sheet
+
+struct TransferBetweenAccountsSheet: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Query(sort: \FinanceAccount.createdAt) private var accounts: [FinanceAccount]
+
+    @State private var sourceAccountID: UUID?
+    @State private var destAccountID: UUID?
+    @State private var amountText = ""
+    @State private var commissionText = ""
+
+    private var sourceAccount: FinanceAccount? { accounts.first { $0.id == sourceAccountID } }
+    private var destAccount: FinanceAccount? { accounts.first { $0.id == destAccountID } }
+    private var amount: Int { Int(amountText.filter { $0.isNumber }) ?? 0 }
+    private var commission: Int { Int(commissionText.filter { $0.isNumber }) ?? 0 }
+    private var canSubmit: Bool {
+        guard let src = sourceAccountID, let dst = destAccountID, src != dst, amount > 0 else { return false }
+        return true
+    }
+
+    private func formatAmount(_ value: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = " "
+        return f.string(from: NSNumber(value: abs(value))) ?? "\(abs(value))"
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color(hex: "#0e0e12").ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 14) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("ОТКУДА")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color(hex: "#6b6b80"))
+                                .tracking(1)
+                            ForEach(accounts) { acc in
+                                transferAccountRow(acc, isSource: true)
+                            }
+                        }
+                        .padding(14)
+                        .darkCard()
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("КУДА")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color(hex: "#6b6b80"))
+                                .tracking(1)
+                            ForEach(accounts) { acc in
+                                if acc.id != sourceAccountID {
+                                    transferAccountRow(acc, isSource: false)
+                                }
+                            }
+                            if sourceAccountID != nil && accounts.count < 2 {
+                                Text("Нужен второй счёт для перевода")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Color(hex: "#6b6b80"))
+                            }
+                        }
+                        .padding(14)
+                        .darkCard()
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("СУММА ПЕРЕВОДА")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color(hex: "#6b6b80"))
+                                .tracking(1)
+                            TextField("0", text: $amountText)
+                                .keyboardType(.numberPad)
+                                .font(.custom("BebasNeue-Regular", size: 36))
+                                .foregroundStyle(Color(hex: "#f0f0f5"))
+                                .multilineTextAlignment(.center)
+                                .padding(.vertical, 8)
+                        }
+                        .padding(16)
+                        .darkCard()
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("КОМИССИЯ (НЕОБЯЗАТЕЛЬНО)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color(hex: "#6b6b80"))
+                                .tracking(1)
+                            TextField("0", text: $commissionText)
+                                .keyboardType(.numberPad)
+                                .font(.system(size: 20, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Color(hex: "#f0f0f5"))
+                                .padding(.vertical, 8)
+                        }
+                        .padding(16)
+                        .darkCard()
+
+                        if let src = sourceAccount, amount > 0 {
+                            VStack(spacing: 4) {
+                                Text("Списание с «\(src.name)»: −\(formatAmount(amount + commission))")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Color(hex: "#ff5c3a"))
+                                if let dst = destAccount {
+                                    Text("Зачисление на «\(dst.name)»: +\(formatAmount(amount))")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(Color(hex: "#3aff9e"))
+                                }
+                                if commission > 0 {
+                                    Text("Комиссия: \(formatAmount(commission))")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(Color(hex: "#6b6b80"))
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(12)
+                            .background(Color(hex: "#1a1a24"))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+
+                        Button {
+                            performTransfer()
+                        } label: {
+                            Text("Перевести")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(canSubmit ? Color(hex: FinanceCategory.transfers.color) : Color(hex: "#6b6b80").opacity(0.4))
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                        }
+                        .disabled(!canSubmit)
+                    }
+                    .padding(16)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+            }
+            .navigationTitle("ПЕРЕВОД")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Закрыть") { dismiss() }.foregroundStyle(Color(hex: "#6b6b80"))
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .onAppear {
+            if sourceAccountID == nil, let first = accounts.first { sourceAccountID = first.id }
+            if destAccountID == nil, let second = accounts.dropFirst().first { destAccountID = second.id }
+            else if destAccountID == nil, let first = accounts.first { destAccountID = first.id }
+        }
+        .onChange(of: sourceAccountID) { _, newSource in
+            if newSource == destAccountID, let other = accounts.first(where: { $0.id != newSource }) {
+                destAccountID = other.id
+            }
+        }
+    }
+
+    private func transferAccountRow(_ acc: FinanceAccount, isSource: Bool) -> some View {
+        let isSelected = isSource ? (sourceAccountID == acc.id) : (destAccountID == acc.id)
+        return Button {
+            if isSource { sourceAccountID = acc.id }
+            else { destAccountID = acc.id }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: acc.icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color(hex: acc.colorHex))
+                    .frame(width: 36, height: 36)
+                    .background(Color(hex: acc.colorHex).opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                Text(acc.name)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Color(hex: "#f0f0f5"))
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color(hex: FinanceCategory.transfers.color))
+                }
+            }
+            .padding(12)
+            .background(isSelected ? Color(hex: acc.colorHex).opacity(0.12) : Color(hex: "#1a1a24"))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func performTransfer() {
+        guard let srcID = sourceAccountID, let dstID = destAccountID,
+              let fromAcc = sourceAccount, let toAcc = destAccount,
+              srcID != dstID, amount > 0 else { return }
+
+        let now = Date()
+        let fromName = fromAcc.name
+        let toName = toAcc.name
+
+        let expenseOut = FinanceTransaction(
+            name: "Перевод на «\(toName)»",
+            amount: amount,
+            category: .transfers,
+            type: .expense,
+            date: now,
+            accountID: srcID
+        )
+        context.insert(expenseOut)
+
+        let incomeIn = FinanceTransaction(
+            name: "Перевод со «\(fromName)»",
+            amount: amount,
+            category: .transfers,
+            type: .income,
+            date: now,
+            accountID: dstID
+        )
+        context.insert(incomeIn)
+
+        if commission > 0 {
+            let commissionTx = FinanceTransaction(
+                name: "Комиссия за перевод",
+                amount: commission,
+                category: .transfers,
+                type: .expense,
+                date: now,
+                accountID: srcID
+            )
+            context.insert(commissionTx)
+        }
+
+        try? context.save()
+        dismiss()
+    }
+}
+
+// MARK: - Pending receipt from Share Extension
+
+struct PendingReceiptSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let transactions: [PendingReceiptTransaction]
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    private func formatAmount(_ value: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = " "
+        return f.string(from: NSNumber(value: abs(value))) ?? "\(abs(value))"
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color(hex: "#0e0e12").ignoresSafeArea()
+                VStack(spacing: 16) {
+                    Text("Добавить оплату из чека?")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(Color(hex: "#f0f0f5"))
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 8)
+
+                    ForEach(Array(transactions.enumerated()), id: \.offset) { _, p in
+                        HStack {
+                            let cat = FinanceCategory(rawValue: p.category) ?? .other
+                            Image(systemName: cat.icon)
+                                .font(.system(size: 14))
+                                .foregroundStyle(Color(hex: cat.color))
+                                .frame(width: 32, height: 32)
+                                .background(Color(hex: cat.color).opacity(0.15))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(p.name)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundStyle(Color(hex: "#f0f0f5"))
+                                Text(p.category)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Color(hex: "#6b6b80"))
+                            }
+                            Spacer()
+                            Text("-\(formatAmount(p.amount))")
+                                .font(.system(size: 15, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Color(hex: "#f0f0f5"))
+                        }
+                        .padding(14)
+                        .background(Color(hex: "#1a1a24"))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+
+                    Spacer(minLength: 20)
+
+                    HStack(spacing: 12) {
+                        Button { onCancel(); dismiss() } label: {
+                            Text("Отмена")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(Color(hex: "#6b6b80"))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color(hex: "#1a1a24"))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(.plain)
+                        Button { onConfirm(); dismiss() } label: {
+                            Text("Добавить")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color(hex: "#ff5c3a"))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal)
+                }
+                .padding(16)
+            }
+            .navigationTitle("Чек из Kaspi")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Закрыть") { onCancel(); dismiss() }
+                        .foregroundStyle(Color(hex: "#6b6b80"))
+                }
             }
         }
         .preferredColorScheme(.dark)

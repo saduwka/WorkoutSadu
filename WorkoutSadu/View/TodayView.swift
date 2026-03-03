@@ -42,7 +42,7 @@ struct TodayView: View {
     private var todayExpense: Int {
         let cal = Calendar.current
         return transactions
-            .filter { cal.isDateInToday($0.date) && $0.type == .expense }
+            .filter { cal.isDateInToday($0.date) && $0.type == .expense && $0.category != .transfers }
             .reduce(0) { $0 + $1.amount }
     }
 

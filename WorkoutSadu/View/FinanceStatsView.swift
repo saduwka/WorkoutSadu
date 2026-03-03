@@ -28,12 +28,13 @@ struct FinanceStatsView: View {
         return allTransactions.filter { $0.date >= s }
     }
 
-    private var totalIncome: Int { filtered.filter { $0.type == .income }.reduce(0) { $0 + $1.amount } }
-    private var totalExpense: Int { filtered.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount } }
+    /// Без переводов между счетами — в общий доход/расход не входят.
+    private var totalIncome: Int { filtered.filter { $0.type == .income && $0.category != .transfers }.reduce(0) { $0 + $1.amount } }
+    private var totalExpense: Int { filtered.filter { $0.type == .expense && $0.category != .transfers }.reduce(0) { $0 + $1.amount } }
 
     private var expensesByCategory: [(FinanceCategory, Int)] {
         var dict: [FinanceCategory: Int] = [:]
-        for tx in filtered where tx.type == .expense {
+        for tx in filtered where tx.type == .expense && tx.category != .transfers {
             dict[tx.category, default: 0] += tx.amount
         }
         return dict.sorted { $0.value > $1.value }
@@ -61,8 +62,8 @@ struct FinanceStatsView: View {
             let start = cal.startOfDay(for: day)
             guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return nil }
             let dayTx = filtered.filter { $0.date >= start && $0.date < end }
-            let inc = dayTx.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
-            let exp = dayTx.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
+            let inc = dayTx.filter { $0.type == .income && $0.category != .transfers }.reduce(0) { $0 + $1.amount }
+            let exp = dayTx.filter { $0.type == .expense && $0.category != .transfers }.reduce(0) { $0 + $1.amount }
             return DayPoint(date: start, income: inc, expense: exp)
         }.reversed()
     }

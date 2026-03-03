@@ -3,21 +3,12 @@ import UIKit
 import Vision
 import PDFKit
 
-final class ReceiptScannerService {
-    static let shared = ReceiptScannerService()
-
-    /// Recognize text from a receipt image using on-device Vision, then parse via AI.
-    func process(image: UIImage) async throws -> [ParsedFinanceEntry] {
-        let ocrText = try await recognizeText(from: image)
-        guard !ocrText.isEmpty else { throw ReceiptError.noTextFound }
-        return try await FinanceAIService.shared.parseReceipt(text: ocrText)
-    }
-
-    /// Extract text from a PDF (e.g. Kaspi receipt). Uses PDFKit text; if none, renders first page and runs OCR.
-    func extractTextFromPDF(url: URL) async throws -> String {
-        guard let doc = PDFDocument(url: url) else { throw ReceiptError.invalidPDF }
+/// PDF/image text extraction for Share Extension (no dependency on main app).
+enum ReceiptTextExtractor {
+    static func extractFromPDF(url: URL) async throws -> String {
+        guard let doc = PDFDocument(url: url) else { throw ExtractError.invalidPDF }
         let pageCount = doc.pageCount
-        guard pageCount > 0 else { throw ReceiptError.noTextFound }
+        guard pageCount > 0 else { throw ExtractError.noText }
 
         var fullText = ""
         for i in 0..<pageCount {
@@ -28,8 +19,7 @@ final class ReceiptScannerService {
         }
 
         if fullText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            // PDF is image-based (e.g. scanned receipt) — render first page and OCR
-            guard let page = doc.page(at: 0) else { throw ReceiptError.noTextFound }
+            guard let page = doc.page(at: 0) else { throw ExtractError.noText }
             let pageRect = page.bounds(for: .mediaBox)
             let renderer = UIGraphicsImageRenderer(size: pageRect.size)
             let image = renderer.image { ctx in
@@ -39,30 +29,22 @@ final class ReceiptScannerService {
                 ctx.cgContext.scaleBy(x: 1, y: -1)
                 page.draw(with: .mediaBox, to: ctx.cgContext)
             }
-            guard let cgImage = image.cgImage else { throw ReceiptError.noTextFound }
+            guard let cgImage = image.cgImage else { throw ExtractError.noText }
             fullText = try await recognizeText(from: UIImage(cgImage: cgImage))
         }
 
         guard !fullText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw ReceiptError.noTextFound
+            throw ExtractError.noText
         }
         return fullText
     }
 
-    /// Process a PDF receipt: extract text then parse via AI.
-    func processPDF(url: URL) async throws -> [ParsedFinanceEntry] {
-        let text = try await extractTextFromPDF(url: url)
-        return try await FinanceAIService.shared.parseReceipt(text: text)
-    }
-
-    /// Extract text from image only (OCR). Use from Share Extension when AI runs in main app.
-    func extractTextFromImage(_ image: UIImage) async throws -> String {
+    static func extractFromImage(_ image: UIImage) async throws -> String {
         try await recognizeText(from: image)
     }
 
-    private func recognizeText(from image: UIImage) async throws -> String {
-        guard let cgImage = image.cgImage else { throw ReceiptError.invalidImage }
-
+    private static func recognizeText(from image: UIImage) async throws -> String {
+        guard let cgImage = image.cgImage else { throw ExtractError.invalidImage }
         return try await withCheckedThrowingContinuation { continuation in
             let request = VNRecognizeTextRequest { request, error in
                 if let error {
@@ -70,7 +52,7 @@ final class ReceiptScannerService {
                     return
                 }
                 guard let observations = request.results as? [VNRecognizedTextObservation] else {
-                    continuation.resume(throwing: ReceiptError.noTextFound)
+                    continuation.resume(throwing: ExtractError.noText)
                     return
                 }
                 let text = observations
@@ -81,7 +63,6 @@ final class ReceiptScannerService {
             request.recognitionLevel = .accurate
             request.recognitionLanguages = ["ru-RU", "en-US"]
             request.usesLanguageCorrection = false
-
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
@@ -94,16 +75,15 @@ final class ReceiptScannerService {
     }
 }
 
-enum ReceiptError: LocalizedError {
-    case invalidImage
+enum ExtractError: LocalizedError {
     case invalidPDF
-    case noTextFound
-
+    case invalidImage
+    case noText
     var errorDescription: String? {
         switch self {
-        case .invalidImage: return "Не удалось обработать изображение"
         case .invalidPDF: return "Не удалось открыть PDF"
-        case .noTextFound: return "Текст на чеке не найден"
+        case .invalidImage: return "Не удалось обработать изображение"
+        case .noText: return "Текст на чеке не найден"
         }
     }
 }

@@ -1,14 +1,22 @@
 import SwiftUI
 import SwiftData
 
+/// Обёртка для показа sheet редактирования по item.
+private struct TransactionEditItem: Identifiable {
+    let transaction: FinanceTransaction
+    var id: UUID { transaction.id }
+}
+
 struct FinanceHistoryView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \FinanceTransaction.date, order: .reverse) private var allTransactions: [FinanceTransaction]
+    @Query(sort: \FinanceAccount.createdAt) private var accounts: [FinanceAccount]
 
     @State private var searchText = ""
     @State private var selectedCategory: FinanceCategory?
     @State private var selectedType: FinanceType?
     @State private var showFilters = false
+    @State private var editingItem: TransactionEditItem?
 
     private var filtered: [FinanceTransaction] {
         var list = allTransactions
@@ -63,6 +71,9 @@ struct FinanceHistoryView: View {
             }
             .navigationTitle("ИСТОРИЯ")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(item: $editingItem) { item in
+                EditTransactionSheet(transaction: item.transaction, accounts: accounts)
+            }
         }
         .preferredColorScheme(.dark)
     }
@@ -143,7 +154,9 @@ struct FinanceHistoryView: View {
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(Color(hex: "#6b6b80"))
             Spacer()
-            let dayTotal = txs.reduce(0) { $0 + ($1.type == .expense ? -$1.amount : $1.amount) }
+            let dayTotal = txs
+                .filter { $0.category != .transfers }
+                .reduce(0) { $0 + ($1.type == .expense ? -$1.amount : $1.amount) }
             Text(formatSigned(dayTotal))
                 .font(.system(size: 12, weight: .bold, design: .monospaced))
                 .foregroundStyle(dayTotal >= 0 ? Color(hex: "#3aff9e") : Color(hex: "#ff5c3a"))
@@ -154,36 +167,47 @@ struct FinanceHistoryView: View {
     // MARK: - Row
 
     private func transactionRow(_ tx: FinanceTransaction) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: tx.category.icon)
-                .font(.system(size: 14))
-                .foregroundStyle(Color(hex: tx.category.color))
-                .frame(width: 36, height: 36)
-                .background(Color(hex: tx.category.color).opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(tx.name)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color(hex: "#f0f0f5"))
-                    .lineLimit(1)
-                Text(tx.category.rawValue)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color(hex: "#6b6b80"))
-            }
-            Spacer()
-            Text("\(tx.type == .income ? "+" : "-")\(formatAmount(tx.amount))")
-                .font(.system(size: 15, weight: .bold, design: .monospaced))
-                .foregroundStyle(tx.type == .income ? Color(hex: "#3aff9e") : Color(hex: "#f0f0f5"))
-
-            Button { context.delete(tx); try? context.save() } label: {
-                Image(systemName: "xmark.circle.fill")
+        Button {
+            editingItem = TransactionEditItem(transaction: tx)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: tx.category.icon)
                     .font(.system(size: 14))
-                    .foregroundStyle(Color(hex: "#6b6b80").opacity(0.4))
+                    .foregroundStyle(Color(hex: tx.category.color))
+                    .frame(width: 36, height: 36)
+                    .background(Color(hex: tx.category.color).opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(tx.name)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color(hex: "#f0f0f5"))
+                        .lineLimit(1)
+                    Text(tx.category.rawValue)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(hex: "#6b6b80"))
+                }
+                Spacer()
+                Text("\(tx.type == .income ? "+" : "-")\(formatAmount(tx.amount))")
+                    .font(.system(size: 15, weight: .bold, design: .monospaced))
+                    .foregroundStyle(tx.type == .income ? Color(hex: "#3aff9e") : Color(hex: "#f0f0f5"))
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#6b6b80").opacity(0.6))
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
-        .padding(.horizontal, 16).padding(.vertical, 10)
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button(role: .destructive) {
+                context.delete(tx)
+                try? context.save()
+            } label: {
+                Label("Удалить", systemImage: "trash")
+            }
+        }
     }
 
     // MARK: - Empty
@@ -209,5 +233,191 @@ struct FinanceHistoryView: View {
     private func formatSigned(_ value: Int) -> String {
         let prefix = value >= 0 ? "+" : "-"
         return "\(prefix)\(formatAmount(abs(value)))"
+    }
+}
+
+// MARK: - Edit Transaction Sheet
+
+private struct EditTransactionSheet: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var transaction: FinanceTransaction
+    let accounts: [FinanceAccount]
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color(hex: "#0e0e12").ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 14) {
+                        typeSelector
+                        amountCard
+                        if !accounts.isEmpty { accountPicker }
+                        detailsCard
+                        categoryCard
+                    }
+                    .padding(16)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+            }
+            .navigationTitle("РЕДАКТИРОВАТЬ")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") { dismiss() }
+                        .foregroundStyle(Color(hex: "#6b6b80"))
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Готово") {
+                        try? context.save()
+                        dismiss()
+                    }
+                    .foregroundStyle(Color(hex: "#ff5c3a"))
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private var typeSelector: some View {
+        Picker("", selection: $transaction.type) {
+            ForEach(FinanceType.allCases, id: \.self) { t in
+                Text(t.rawValue).tag(t)
+            }
+        }
+        .pickerStyle(.segmented)
+        .onChange(of: transaction.type) {
+            if transaction.type == .income { transaction.category = .income }
+            else if transaction.category == .income { transaction.category = .other }
+        }
+    }
+
+    private var amountCard: some View {
+        VStack(spacing: 8) {
+            Text("СУММА")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color(hex: "#6b6b80"))
+                .tracking(1)
+            TextField("0", value: $transaction.amount, format: .number)
+                .keyboardType(.numberPad)
+                .font(.custom("BebasNeue-Regular", size: 48))
+                .foregroundStyle(transaction.type == .income ? Color(hex: "#3aff9e") : Color(hex: "#f0f0f5"))
+                .multilineTextAlignment(.center)
+        }
+        .padding(20)
+        .darkCard()
+    }
+
+    private var accountPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("СЧЁТ")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color(hex: "#6b6b80"))
+                .tracking(1)
+                .padding(.horizontal, 4)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    Button {
+                        transaction.accountID = nil
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("Без счёта")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundStyle(transaction.accountID == nil ? .white : Color(hex: "#6b6b80"))
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(transaction.accountID == nil ? Color(hex: "#6b6b80") : Color(hex: "#1a1a24"))
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    ForEach(accounts) { acc in
+                        Button {
+                            transaction.accountID = acc.id
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: acc.icon)
+                                    .font(.system(size: 12))
+                                Text(acc.name)
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundStyle(transaction.accountID == acc.id ? .white : Color(hex: "#6b6b80"))
+                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .background(transaction.accountID == acc.id ? Color(hex: acc.colorHex) : Color(hex: "#1a1a24"))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .darkCard()
+    }
+
+    private var detailsCard: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "pencil").foregroundStyle(Color(hex: "#6b6b80"))
+                TextField("Название", text: $transaction.name)
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color(hex: "#f0f0f5"))
+            }
+            .padding(14)
+            .background(Color(hex: "#1a1a24"))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            DatePicker("Дата", selection: $transaction.date, displayedComponents: .date)
+                .font(.system(size: 16))
+                .foregroundStyle(Color(hex: "#f0f0f5"))
+                .tint(Color(hex: "#ff5c3a"))
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .background(Color(hex: "#1a1a24"))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .darkCard()
+    }
+
+    private var categoryCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("КАТЕГОРИЯ")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color(hex: "#6b6b80"))
+                .tracking(1)
+                .padding(.horizontal, 4)
+
+            let categories = transaction.type == .income
+                ? [FinanceCategory.income]
+                : FinanceCategory.allCases.filter { $0 != .income }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                ForEach(categories, id: \.self) { cat in
+                    Button {
+                        transaction.category = cat
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: cat.icon)
+                                .font(.system(size: 16))
+                                .foregroundStyle(transaction.category == cat ? Color(hex: cat.color) : Color(hex: "#6b6b80"))
+                            Text(cat.rawValue)
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(transaction.category == cat ? Color(hex: "#f0f0f5") : Color(hex: "#6b6b80"))
+                                .lineLimit(1).minimumScaleFactor(0.7)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(transaction.category == cat ? Color(hex: cat.color).opacity(0.15) : Color(hex: "#1a1a24"))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(transaction.category == cat ? Color(hex: cat.color).opacity(0.4) : .clear, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(14)
+        .darkCard()
     }
 }

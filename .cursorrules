@@ -1,0 +1,38 @@
+# WorkoutSadu — правила стиля и контекста
+
+## Язык и локализация
+- Все строки интерфейса — на **русском** (кнопки, заголовки, подсказки, ошибки).
+- Заголовки экранов в навбаре — в ВЕРХНЕМ РЕГИСТРЕ, например: «ФИНАНСЫ», «ИСТОРИЯ», «РЕДАКТИРОВАТЬ».
+- Подписи секций (лейблы над полями) — в верхнем регистре с трекингом: `.font(.system(size: 10, weight: .bold))`, `.foregroundStyle(Color(hex: "#6b6b80"))`, `.tracking(1)`.
+
+## Дизайн и тема
+- Тёмная тема везде: фон `Color(hex: "#0e0e12")`, карточки через модификатор **`.darkCard()`** (из AppTheme), при необходимости акцентная обводка `.darkCard(accentBorder: color.opacity(0.2))`.
+- Цвета: акцент оранжевый `#ff5c3a`, второстепенный текст `#6b6b80`, основной текст `#f0f0f5`, доходы/успех `#3aff9e`, предупреждения/расход `#ff5c3a` или `#f0f0f5`.
+- Использовать **`Color(hex: "...")`** для цветов (extension есть в AppTheme).
+- Крупные числа (суммы, балансы) — шрифт **BebasNeue**: `.font(.custom("BebasNeue-Regular", size: ...))`.
+- В конце корневых экранов: `.preferredColorScheme(.dark)`.
+
+## SwiftUI и SwiftData
+- Запросы: `@Query(sort: \Model.date, order: .reverse)` и т.п.
+- Контекст: `@Environment(\.modelContext) private var context`; сохранение: `try? context.save()` после изменений.
+- Редактирование существующих моделей: **`@Bindable var model: Model`** в sheet, правки по месту, кнопка «Готово» → `try? context.save(); dismiss()`.
+- Листы: по возможности `.sheet(item: $selectedItem)` с типом `Identifiable`, чтобы не плодить отдельные флаги.
+- Кнопки без подсветки по умолчанию: **`.buttonStyle(.plain)`** у кастомных кнопок.
+- Скрытие клавиатуры: при необходимости `.onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), ...) }` и/или `.scrollDismissesKeyboard(.interactively)`.
+
+## Структура кода
+- Группировка: **`// MARK: - SectionName`** (например `// MARK: - Row`, `// MARK: - Helpers`).
+- Вью-специфичные куски (карточки, строки списка) — **`private var`** / **`private func`** внутри той же View.
+- Именование: экраны-модалки с суффиксом **Sheet** (AddAccountSheet, EditTransactionSheet), сервисы — **Service** или **Manager**, типы данных в **Exercise/** (FinanceTransaction, TodoItem и т.д.).
+
+## Финансы
+- Категория **Переводы** (`FinanceCategory.transfers`) не входит в общие «доходы/расходы» при подсчёте итогов (деньги остаются у пользователя). В фильтрах и суммах по типам транзакций такие операции исключать: `$0.category != .transfers`.
+- Переводы между счетами: два типа записей (расход со счёта-источника, доход на счёт-назначения) плюс опциональная комиссия; категория у всех — «Переводы».
+
+## Share Extension
+- Таргет ShareReceiptExtension: свои типы (ParsedReceiptItem, ExtensionStorage), без доступа к основному приложению. Категории расхода дублировать строковым списком, совпадающим с `FinanceCategory` (без «Доход»/«Переводы»).
+- App Group: `group.com.saduwka.WorkoutSadu` для обмена данными между расширением и основным приложением.
+
+## Общее
+- Новый код писать в том же стиле, что и существующий в проекте: отступы, переносы, порядок модификаторов.
+- Не добавлять лишние зависимости без необходимости; использовать по возможности только SwiftUI, SwiftData, системные фреймворки и уже подключённые (Firebase AI и т.д.).

@@ -860,6 +860,21 @@ final class GymBroManager {
         \(templateInstructions(summary))
 
         \(lifeActionInstructions())
+
+        ПОЛНЫЕ ДАННЫЕ (используй когда пользователь просит показать траты, доходы, тренировки, задачи, счета):
+        Когда пользователь спрашивает «что тратил», «покажи расходы», «какие были доходы», «последние тренировки», «какие задачи», «баланс по счетам» — отвечай на основе блоков ниже.
+
+        ПОСЛЕДНИЕ ТРАНЗАКЦИИ (дата название категория ±сумма):
+        \(summary.recentTransactionsText)
+
+        СЧЕТА И БАЛАНСЫ:
+        \(summary.accountsBalanceText)
+
+        ПОСЛЕДНИЕ ТРЕНИРОВКИ (дата название длительность, упражнения и подходы):
+        \(summary.recentWorkoutsText)
+
+        НЕВЫПОЛНЕННЫЕ ЗАДАЧИ (названия):
+        \(summary.pendingTodoTitles.isEmpty ? "—" : summary.pendingTodoTitles.joined(separator: "\n"))
         """
     }
 
@@ -981,6 +996,7 @@ final class GymBroManager {
             if let todos = try? ctx.fetch(FetchDescriptor<TodoItem>()) {
                 summary.pendingTodos = todos.filter { !$0.completed }.count
                 summary.completedTodosToday = todos.filter { $0.completed && cal.isDateInToday($0.createdAt) }.count
+                summary.pendingTodoTitles = todos.filter { !$0.completed }.map { $0.title }
             }
 
             if let goals = try? ctx.fetch(FetchDescriptor<WeeklyGoal>()) {
@@ -999,11 +1015,33 @@ final class GymBroManager {
                     return total + acc.balance + inc - exp
                 }
                 let todayTx = transactions.filter { cal.isDateInToday($0.date) }
-                summary.todayExpense = todayTx.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
-                summary.todayIncome = todayTx.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
-                summary.monthExpense = transactions.filter { $0.date >= monthAgo && $0.type == .expense }.reduce(0) { $0 + $1.amount }
+                let noTransfers: (FinanceTransaction) -> Bool = { $0.category != .transfers }
+                summary.todayExpense = todayTx.filter { $0.type == .expense && noTransfers($0) }.reduce(0) { $0 + $1.amount }
+                summary.todayIncome = todayTx.filter { $0.type == .income && noTransfers($0) }.reduce(0) { $0 + $1.amount }
+                summary.monthExpense = transactions.filter { $0.date >= monthAgo && $0.type == .expense && noTransfers($0) }.reduce(0) { $0 + $1.amount }
+
+                let txDateFormatter = DateFormatter()
+                txDateFormatter.dateFormat = "dd.MM"
+                let sortedTx = transactions.sorted { $0.date > $1.date }
+                summary.recentTransactionsText = sortedTx.prefix(50).map { tx in
+                    let sign = tx.type == .income ? "+" : "−"
+                    return "\(txDateFormatter.string(from: tx.date)) \(tx.name) \(tx.category.rawValue) \(sign)\(tx.amount)"
+                }.joined(separator: "\n")
+                if summary.recentTransactionsText.isEmpty { summary.recentTransactionsText = "—" }
+
+                summary.accountsBalanceText = accounts.map { acc in
+                    let txs = transactions.filter { $0.accountID == acc.id }
+                    let inc = txs.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
+                    let exp = txs.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
+                    let bal = acc.balance + inc - exp
+                    return "\(acc.name): \(bal) ₸"
+                }.joined(separator: "\n")
+                if summary.accountsBalanceText.isEmpty { summary.accountsBalanceText = "—" }
             }
         }
+
+        summary.recentWorkoutsText = formatWorkouts(Array(recent.sorted { $0.date > $1.date }.prefix(20)))
+        if summary.recentWorkoutsText.isEmpty { summary.recentWorkoutsText = "—" }
 
         return summary
     }
@@ -1065,4 +1103,10 @@ private struct WorkoutSummary {
     var todayExpense: Int = 0
     var todayIncome: Int = 0
     var monthExpense: Int = 0
+
+    /// Полные данные для ответов на запросы «покажи траты», «что по тренировкам», «какие задачи»
+    var recentTransactionsText: String = ""
+    var accountsBalanceText: String = ""
+    var recentWorkoutsText: String = ""
+    var pendingTodoTitles: [String] = []
 }

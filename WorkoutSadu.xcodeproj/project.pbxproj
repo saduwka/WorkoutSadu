@@ -16,6 +16,7 @@
 		61C5CB072F4B70B60072394A /* FirebaseAnalyticsCore in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB062F4B70B60072394A /* FirebaseAnalyticsCore */; };
 		61C5CB092F4B70B60072394A /* FirebaseAnalyticsIdentitySupport in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB082F4B70B60072394A /* FirebaseAnalyticsIdentitySupport */; };
 		61C5CB0C2F4B75A70072394A /* GoogleGenerativeAI in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB0B2F4B75A70072394A /* GoogleGenerativeAI */; };
+		61SE40012F4DD6000072394A /* ShareReceiptExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 61SE41012F4DD6000072394A /* ShareReceiptExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,6 +41,13 @@
 			remoteGlobalIDString = 614C5A402F4DD5E900AE3FF7;
 			remoteInfo = WorkoutSaduWidgetExtension;
 		};
+		61SE48012F4DD6000072394A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6142BED22F323E070079F840 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 61SE43012F4DD6000072394A;
+			remoteInfo = ShareReceiptExtension;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -50,6 +58,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				614C5A502F4DD5EB00AE3FF7 /* WorkoutSaduWidgetExtension.appex in Embed Foundation Extensions */,
+				61SE40012F4DD6000072394A /* ShareReceiptExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -64,6 +73,7 @@
 		614C5A252F4DD5C000AE3FF7 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		614C5A412F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WorkoutSaduWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		614C5A592F4DD60700AE3FF7 /* WorkoutSaduWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WorkoutSaduWidgetExtension.entitlements; sourceTree = "<group>"; };
+		61SE41012F4DD6000072394A /* ShareReceiptExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareReceiptExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -73,6 +83,13 @@
 				Info.plist,
 			);
 			target = 614C5A402F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension */;
+		};
+		61SE51012F4DD6000072394A /* Exceptions for "ShareReceiptExtension" folder in "ShareReceiptExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 61SE43012F4DD6000072394A /* ShareReceiptExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -98,6 +115,14 @@
 				614C5A512F4DD5EB00AE3FF7 /* Exceptions for "WorkoutSaduWidget" folder in "WorkoutSaduWidgetExtension" target */,
 			);
 			path = WorkoutSaduWidget;
+			sourceTree = "<group>";
+		};
+		61SE44012F4DD6000072394A /* ShareReceiptExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				61SE51012F4DD6000072394A /* Exceptions for "ShareReceiptExtension" folder in "ShareReceiptExtension" target */,
+			);
+			path = ShareReceiptExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -139,6 +164,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		61SE46012F4DD6000072394A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -150,6 +182,7 @@
 				6142BEEF2F323E090079F840 /* WorkoutSaduTests */,
 				6142BEF92F323E0A0079F840 /* WorkoutSaduUITests */,
 				614C5A442F4DD5E900AE3FF7 /* WorkoutSaduWidget */,
+				61SE44012F4DD6000072394A /* ShareReceiptExtension */,
 				614C5A222F4DD5C000AE3FF7 /* Frameworks */,
 				6142BEDB2F323E070079F840 /* Products */,
 			);
@@ -162,6 +195,7 @@
 				6142BEEC2F323E090079F840 /* WorkoutSaduTests.xctest */,
 				6142BEF62F323E0A0079F840 /* WorkoutSaduUITests.xctest */,
 				614C5A412F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension.appex */,
+				61SE41012F4DD6000072394A /* ShareReceiptExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -191,6 +225,7 @@
 			);
 			dependencies = (
 				614C5A4F2F4DD5EB00AE3FF7 /* PBXTargetDependency */,
+				61SE49012F4DD6000072394A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				6142BEDC2F323E070079F840 /* WorkoutSadu */,
@@ -276,6 +311,28 @@
 			productReference = 614C5A412F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		61SE43012F4DD6000072394A /* ShareReceiptExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 61SE4A012F4DD6000072394A /* Build configuration list for PBXNativeTarget "ShareReceiptExtension" */;
+			buildPhases = (
+				61SE45012F4DD6000072394A /* Sources */,
+				61SE46012F4DD6000072394A /* Frameworks */,
+				61SE47012F4DD6000072394A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				61SE44012F4DD6000072394A /* ShareReceiptExtension */,
+			);
+			name = ShareReceiptExtension;
+			packageProductDependencies = (
+			);
+			productName = ShareReceiptExtension;
+			productReference = 61SE41012F4DD6000072394A /* ShareReceiptExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -298,6 +355,9 @@
 						TestTargetID = 6142BED92F323E070079F840;
 					};
 					614C5A402F4DD5E900AE3FF7 = {
+						CreatedOnToolsVersion = 26.1;
+					};
+					61SE43012F4DD6000072394A = {
 						CreatedOnToolsVersion = 26.1;
 					};
 				};
@@ -324,6 +384,7 @@
 				6142BEEB2F323E090079F840 /* WorkoutSaduTests */,
 				6142BEF52F323E0A0079F840 /* WorkoutSaduUITests */,
 				614C5A402F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension */,
+				61SE43012F4DD6000072394A /* ShareReceiptExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -351,6 +412,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		614C5A3F2F4DD5E900AE3FF7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		61SE47012F4DD6000072394A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -388,6 +456,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		61SE45012F4DD6000072394A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -405,6 +480,11 @@
 			isa = PBXTargetDependency;
 			target = 614C5A402F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension */;
 			targetProxy = 614C5A4E2F4DD5EB00AE3FF7 /* PBXContainerItemProxy */;
+		};
+		61SE49012F4DD6000072394A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 61SE43012F4DD6000072394A /* ShareReceiptExtension */;
+			targetProxy = 61SE48012F4DD6000072394A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -748,6 +828,64 @@
 			};
 			name = Release;
 		};
+		61SE4B012F4DD6000072394A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ShareReceiptExtension/ShareReceiptExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8PRZ5T6DB3;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ShareReceiptExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Добавить в Деньги";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.saduwka.Workout.ShareReceiptExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		61SE4C012F4DD6000072394A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ShareReceiptExtension/ShareReceiptExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8PRZ5T6DB3;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ShareReceiptExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Добавить в Деньги";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.saduwka.Workout.ShareReceiptExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -792,6 +930,15 @@
 			buildConfigurations = (
 				614C5A532F4DD5EB00AE3FF7 /* Debug */,
 				614C5A542F4DD5EB00AE3FF7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		61SE4A012F4DD6000072394A /* Build configuration list for PBXNativeTarget "ShareReceiptExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				61SE4B012F4DD6000072394A /* Debug */,
+				61SE4C012F4DD6000072394A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
