@@ -42,10 +42,14 @@ struct WidgetSyncModifier: ViewModifier {
             .task {
                 WidgetDataManager.sync(context: context)
                 WidgetCenter.shared.reloadAllTimelines()
+                await FirebaseBackupService.shared.tryExportIfNeeded(context: context)
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                 WidgetDataManager.sync(context: context)
                 WidgetCenter.shared.reloadAllTimelines()
+                Task { @MainActor in
+                    await FirebaseBackupService.shared.tryExportIfNeeded(context: context)
+                }
             }
     }
 }

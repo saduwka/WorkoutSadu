@@ -10,6 +10,8 @@
 		614C5A422F4DD5E900AE3FF7 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 614C5A232F4DD5C000AE3FF7 /* WidgetKit.framework */; };
 		614C5A432F4DD5E900AE3FF7 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 614C5A252F4DD5C000AE3FF7 /* SwiftUI.framework */; };
 		614C5A502F4DD5EB00AE3FF7 /* WorkoutSaduWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 614C5A412F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		61BC01012F4DD7000072394A /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 61BC01032F4DD7000072394A /* FirebaseAuth */; };
+		61BC01022F4DD7000072394A /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 61BC01042F4DD7000072394A /* FirebaseStorage */; };
 		61C5CB012F4B70B60072394A /* FirebaseAI in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB002F4B70B60072394A /* FirebaseAI */; };
 		61C5CB032F4B70B60072394A /* FirebaseAILogic in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB022F4B70B60072394A /* FirebaseAILogic */; };
 		61C5CB052F4B70B60072394A /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB042F4B70B60072394A /* FirebaseAnalytics */; };
@@ -136,6 +138,8 @@
 				61C5CB092F4B70B60072394A /* FirebaseAnalyticsIdentitySupport in Frameworks */,
 				61C5CB012F4B70B60072394A /* FirebaseAI in Frameworks */,
 				61C5CB0C2F4B75A70072394A /* GoogleGenerativeAI in Frameworks */,
+				61BC01012F4DD7000072394A /* FirebaseAuth in Frameworks */,
+				61BC01022F4DD7000072394A /* FirebaseStorage in Frameworks */,
 				61C5CB052F4B70B60072394A /* FirebaseAnalytics in Frameworks */,
 				61C5CB072F4B70B60072394A /* FirebaseAnalyticsCore in Frameworks */,
 			);
@@ -237,6 +241,8 @@
 				61C5CB042F4B70B60072394A /* FirebaseAnalytics */,
 				61C5CB062F4B70B60072394A /* FirebaseAnalyticsCore */,
 				61C5CB082F4B70B60072394A /* FirebaseAnalyticsIdentitySupport */,
+				61BC01032F4DD7000072394A /* FirebaseAuth */,
+				61BC01042F4DD7000072394A /* FirebaseStorage */,
 				61C5CB0B2F4B75A70072394A /* GoogleGenerativeAI */,
 			);
 			productName = WorkoutSadu;
@@ -965,6 +971,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		61BC01032F4DD7000072394A /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 61C5CAFF2F4B70B60072394A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		61BC01042F4DD7000072394A /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 61C5CAFF2F4B70B60072394A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
 		61C5CB002F4B70B60072394A /* FirebaseAI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 61C5CAFF2F4B70B60072394A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
