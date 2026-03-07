@@ -69,6 +69,7 @@ struct ExerciseEditView: View {
                         }
                     }
                 }
+                .dismissKeyboardOnTap()
                 .scrollContentBackground(.hidden)
             }
             .navigationTitle("Настройки")

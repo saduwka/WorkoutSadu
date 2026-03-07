@@ -2,6 +2,7 @@ import Foundation
 import SwiftData
 import FirebaseAI
 import UserNotifications
+import UIKit
 
 // MARK: - Chat Session
 
@@ -54,10 +55,12 @@ struct GymBroMessage: Identifiable {
     let lifeAction: PendingLifeAction?
     let timestamp: Date
     let isSetComment: Bool
+    /// Фото, приложенные к сообщению (в истории не сохраняем — только для отображения в текущей сессии).
+    var attachedImageData: [Data]
 
     enum Role { case ai, user }
 
-    init(id: UUID = UUID(), role: Role, text: String, template: PendingTemplate? = nil, lifeAction: PendingLifeAction? = nil, isSetComment: Bool = false) {
+    init(id: UUID = UUID(), role: Role, text: String, template: PendingTemplate? = nil, lifeAction: PendingLifeAction? = nil, isSetComment: Bool = false, attachedImageData: [Data] = []) {
         self.id = id
         self.role = role
         self.text = text
@@ -65,6 +68,7 @@ struct GymBroMessage: Identifiable {
         self.lifeAction = lifeAction
         self.timestamp = Date()
         self.isSetComment = isSetComment
+        self.attachedImageData = attachedImageData
     }
 }
 
@@ -150,6 +154,12 @@ final class GymBroManager {
     var currentChatId: UUID? = nil
     var chatTitle: String = "Новый чат"
     var showChatList = false
+    /// Контекст экрана, с которого открыли чат (например «Упражнение: Жим штанги лёжа»). Учитывается в промпте.
+    var screenContext: String? = nil
+    /// Фото упражнения из текущего экрана (например демо/фото из ExerciseView). Передаётся в ИИ при ответе.
+    var screenContextImage: Data? = nil
+    /// Текст ответа во время стриминга (печатается в реальном времени).
+    var streamingText: String = ""
 
     private var insightsReady = false
     private var lastSummary: WorkoutSummary?
@@ -248,19 +258,21 @@ final class GymBroManager {
         }
     }
 
-    func send(text: String, workouts: [Workout], templates: [WorkoutTemplate] = [], profile: BodyProfile?, attached: [Workout] = [], attachedTemplates: [WorkoutTemplate] = []) {
+    func send(text: String, workouts: [Workout], templates: [WorkoutTemplate] = [], profile: BodyProfile?, attached: [Workout] = [], attachedTemplates: [WorkoutTemplate] = [], attachedImages: [Data] = []) {
         guard !isLoading else { return }
         let isFirstUserMessage = !messages.contains { $0.role == .user && !$0.isSetComment }
         var badges: [String] = []
         if !attached.isEmpty { badges.append("\(attached.count) трен.") }
         if !attachedTemplates.isEmpty { badges.append("\(attachedTemplates.count) шабл.") }
+        if !attachedImages.isEmpty { badges.append("\(attachedImages.count) фото") }
         let attachLabel = badges.isEmpty ? "" : " 📎 [\(badges.joined(separator: ", "))]"
-        let userMsg = GymBroMessage(role: .user, text: text + attachLabel)
+        let userMsg = GymBroMessage(role: .user, text: text + attachLabel, attachedImageData: attachedImages)
         messages.append(userMsg)
         persistMessage(userMsg)
         if isFirstUserMessage { autoTitleChat(with: text) }
         let summary = lastSummary ?? buildSummary(workouts: workouts, templates: templates, profile: profile)
-        Task { await fetchReply(userText: text, summary: summary, attached: attached, attachedTemplates: attachedTemplates) }
+        let contextImage = screenContextImage
+        Task { await fetchReply(userText: text, summary: summary, attached: attached, attachedTemplates: attachedTemplates, attachedImages: attachedImages, contextImage: contextImage) }
     }
 
     func markTemplateSaved(messageId: UUID) {
@@ -392,6 +404,26 @@ final class GymBroManager {
         return chatModel.startChat(history: history)
     }
 
+    /// Модель с тем же системным промптом для мультимодальных запросов (текст + изображения).
+    private func getChatModel(summary: WorkoutSummary) -> GenerativeModel {
+        let systemPrompt = compactSystemPrompt(summary: summary)
+        let ai = FirebaseAI.firebaseAI(backend: .googleAI())
+        return ai.generativeModel(
+            modelName: "gemini-2.5-flash-lite",
+            generationConfig: GenerationConfig(temperature: 0.75, maxOutputTokens: 1024),
+            systemInstruction: ModelContent(role: "system", parts: systemPrompt)
+        )
+    }
+
+    /// Текст переписки для мультимодального запроса (без последнего сообщения).
+    private func buildHistoryPrompt(from msgs: [GymBroMessage]) -> String {
+        let chatMsgs = Array(msgs.filter { !$0.isSetComment }.suffix(30))
+        return chatMsgs.map { msg in
+            let role = msg.role == .user ? "Пользователь" : "Ассистент"
+            return "\(role): \(msg.text)"
+        }.joined(separator: "\n\n")
+    }
+
     // MARK: - Multi-chat helpers
 
     private func loadMostRecentChat(workouts: [Workout], templates: [WorkoutTemplate] = [], profile: BodyProfile?) {
@@ -463,7 +495,11 @@ final class GymBroManager {
     // MARK: - API calls
 
     private func fetchOpeningMessage(summary: WorkoutSummary) async {
-        await MainActor.run { isLoading = true; errorMessage = nil }
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+            streamingText = ""
+        }
 
         let session = createChatSession(summary: summary, fromMessages: messages)
         let prompt = """
@@ -475,22 +511,37 @@ final class GymBroManager {
         """
 
         do {
-            let response = try await session.sendMessage(prompt)
+            let stream = try session.sendMessageStream(prompt)
+            var accumulated = ""
+
+            for try await chunk in stream {
+                if let chunkText = chunk.text {
+                    accumulated += chunkText
+                    let current = accumulated
+                    await MainActor.run { streamingText = current }
+                }
+            }
+
             await MainActor.run {
                 isLoading = false
-                if let text = response.text?.trimmingCharacters(in: .whitespacesAndNewlines) {
-                    let (cleanText, template, lifeAction) = parseResponse(text)
-                    let aiMsg = GymBroMessage(role: .ai, text: cleanText, template: template, lifeAction: lifeAction)
-                    messages.append(aiMsg)
-                    persistMessage(aiMsg)
-                } else if errorMessage == nil {
-                    errorMessage = "Не удалось загрузить — проверь интернет"
+                streamingText = ""
+
+                let fullText = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !fullText.isEmpty else {
+                    if errorMessage == nil { errorMessage = "Не удалось загрузить — проверь интернет" }
+                    return
                 }
+
+                let (cleanText, template, lifeAction) = parseResponse(fullText)
+                let aiMsg = GymBroMessage(role: .ai, text: cleanText, template: template, lifeAction: lifeAction)
+                messages.append(aiMsg)
+                persistMessage(aiMsg)
             }
         } catch {
             print("GymBro opening error: \(error.localizedDescription)")
             await MainActor.run {
                 isLoading = false
+                streamingText = ""
                 errorMessage = error.localizedDescription.contains("429")
                     ? "Слишком много запросов. Подожди минуту."
                     : "Ошибка ИИ: \(error.localizedDescription)"
@@ -498,11 +549,12 @@ final class GymBroManager {
         }
     }
 
-    private func fetchReply(userText: String, summary: WorkoutSummary, attached: [Workout] = [], attachedTemplates: [WorkoutTemplate] = []) async {
-        await MainActor.run { isLoading = true; errorMessage = nil }
-
-        let historyMsgs = Array(messages.dropLast())
-        let session = createChatSession(summary: summary, fromMessages: historyMsgs)
+    private func fetchReply(userText: String, summary: WorkoutSummary, attached: [Workout] = [], attachedTemplates: [WorkoutTemplate] = [], attachedImages: [Data] = [], contextImage: Data? = nil) async {
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+            streamingText = ""
+        }
 
         var messageText = userText
         if !attached.isEmpty {
@@ -515,12 +567,90 @@ final class GymBroManager {
             messageText += "\nПроанализируй прикреплённые данные в контексте моего вопроса."
         }
 
+        let hasImages = !attachedImages.isEmpty || contextImage != nil
+        if hasImages {
+            await fetchReplyMultimodal(summary: summary, messageText: messageText, attachedImages: attachedImages, contextImage: contextImage)
+            return
+        }
+
+        let historyMsgs = Array(messages.dropLast())
+        let session = createChatSession(summary: summary, fromMessages: historyMsgs)
+
         do {
-            let response = try await session.sendMessage(messageText)
+            let stream = try session.sendMessageStream(messageText)
+            var accumulated = ""
+
+            for try await chunk in stream {
+                if let chunkText = chunk.text {
+                    accumulated += chunkText
+                    let current = accumulated
+                    await MainActor.run { streamingText = current }
+                }
+            }
+
             await MainActor.run {
                 isLoading = false
-                if let text = response.text?.trimmingCharacters(in: .whitespacesAndNewlines) {
-                    let (cleanText, template, lifeAction) = parseResponse(text)
+                streamingText = ""
+
+                let fullText = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !fullText.isEmpty else {
+                    errorMessage = "Не могу ответить, попробуй позже"
+                    return
+                }
+
+                let (cleanText, template, lifeAction) = parseResponse(fullText)
+                let aiMsg = GymBroMessage(role: .ai, text: cleanText, template: template, lifeAction: lifeAction)
+                messages.append(aiMsg)
+                persistMessage(aiMsg)
+            }
+        } catch {
+            print("GymBro reply error: \(error.localizedDescription)")
+            await MainActor.run {
+                isLoading = false
+                streamingText = ""
+                errorMessage = error.localizedDescription.contains("429")
+                    ? "Слишком много запросов. Подожди минуту."
+                    : "Ошибка ИИ: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func fetchReplyMultimodal(summary: WorkoutSummary, messageText: String, attachedImages: [Data], contextImage: Data?) async {
+        let historyMsgs = Array(messages.dropLast())
+        let historyBlock = buildHistoryPrompt(from: historyMsgs)
+        let promptSuffix = """
+        \(historyBlock.isEmpty ? "" : "--- Переписка ---\n\(historyBlock)\n\n")
+        --- Текущее сообщение пользователя ---
+        \(messageText)
+        К этому сообщению приложены изображения (фото из чата и/или фото упражнения из экрана). Учти их в ответе.
+        """
+        var images: [UIImage] = []
+        if let ctx = contextImage, let img = UIImage(data: ctx) {
+            images.append(img)
+        }
+        for data in attachedImages {
+            if let img = UIImage(data: data) {
+                images.append(img)
+            }
+        }
+
+        do {
+            let model = getChatModel(summary: summary)
+            let response: GenerateContentResponse
+            if images.isEmpty {
+                response = try await model.generateContent(promptSuffix)
+            } else if images.count == 1 {
+                response = try await model.generateContent([promptSuffix, images[0]])
+            } else if images.count == 2 {
+                response = try await model.generateContent([promptSuffix, images[0], images[1]])
+            } else {
+                response = try await model.generateContent([promptSuffix, images[0], images[1], images[2]])
+            }
+            let fullText = response.text?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
+            await MainActor.run {
+                isLoading = false
+                if !fullText.isEmpty {
+                    let (cleanText, template, lifeAction) = parseResponse(fullText)
                     let aiMsg = GymBroMessage(role: .ai, text: cleanText, template: template, lifeAction: lifeAction)
                     messages.append(aiMsg)
                     persistMessage(aiMsg)
@@ -529,7 +659,7 @@ final class GymBroManager {
                 }
             }
         } catch {
-            print("GymBro reply error: \(error.localizedDescription)")
+            print("GymBro multimodal reply error: \(error.localizedDescription)")
             await MainActor.run {
                 isLoading = false
                 errorMessage = error.localizedDescription.contains("429")
@@ -829,10 +959,20 @@ final class GymBroManager {
     }
 
     private func compactSystemPrompt(summary: WorkoutSummary) -> String {
+        let contextBlock: String
+        if let ctx = screenContext, !ctx.isEmpty {
+            contextBlock = """
+                КОНТЕКСТ ОТКРЫТИЯ: Пользователь открыл чат с экрана: \(ctx). Учитывай это при ответе (например, если он в упражнении — знаешь какое упражнение и можешь давать советы по технике, положению и т.д.).
+
+                """
+        } else {
+            contextBlock = ""
+        }
         return """
         Ты Life Bro — дружелюбный лайф-коуч в iOS-приложении LifeOS.
-        Ты знаешь про тренировки, финансы, привычки, задачи и цели пользователя.
-        Говори как знающий друг: прямо, конкретно, с юмором. Давай советы на стыке данных.
+        Ты знаешь про тренировки, финансы, привычки, задачи, цели и питание (еду/калории) пользователя.
+        \(contextBlock)\
+        Говори как знающий друг: прямо, конкретно, с юмором. Давай советы на стыке данных, в том числе по еде и калориям.
         Например: если пользователь много тратит и мало тренируется — подмечай это.
         Если серия привычек рвётся — мотивируй. Отвечай на том же языке что и пользователь.
         У тебя есть долгосрочная память — ты помнишь все прошлые разговоры с пользователем.
@@ -854,6 +994,9 @@ final class GymBroManager {
         ФИНАНСЫ:
         \(financeBlock(summary))
 
+        ЕДА / ПИТАНИЕ:
+        \(mealsBlock(summary))
+
         ШАБЛОНЫ:
         \(templatesBlock(summary))
 
@@ -861,8 +1004,8 @@ final class GymBroManager {
 
         \(lifeActionInstructions())
 
-        ПОЛНЫЕ ДАННЫЕ (используй когда пользователь просит показать траты, доходы, тренировки, задачи, счета):
-        Когда пользователь спрашивает «что тратил», «покажи расходы», «какие были доходы», «последние тренировки», «какие задачи», «баланс по счетам» — отвечай на основе блоков ниже.
+        ПОЛНЫЕ ДАННЫЕ (используй когда пользователь просит показать траты, доходы, тренировки, задачи, счета, еду):
+        Когда пользователь спрашивает «что тратил», «покажи расходы», «какие были доходы», «последние тренировки», «какие задачи», «баланс по счетам», «что ел», «калории сегодня», «как питаться» — отвечай на основе блоков ниже.
 
         ПОСЛЕДНИЕ ТРАНЗАКЦИИ (дата название категория ±сумма):
         \(summary.recentTransactionsText)
@@ -875,7 +1018,25 @@ final class GymBroManager {
 
         НЕВЫПОЛНЕННЫЕ ЗАДАЧИ (названия):
         \(summary.pendingTodoTitles.isEmpty ? "—" : summary.pendingTodoTitles.joined(separator: "\n"))
+
+        ПРИЁМЫ ПИЩИ СЕГОДНЯ (название, ккал, Б/Ж/У г):
+        \(summary.mealsTodayText.isEmpty ? "—" : summary.mealsTodayText)
         """
+    }
+
+    private func mealsBlock(_ summary: WorkoutSummary) -> String {
+        var lines: [String] = []
+        lines.append("Сегодня съедено: \(summary.caloriesEatenToday) ккал. Сожжено (тренировки): \(summary.caloriesBurnedToday) ккал.")
+        if let target = summary.dailyCalorieTarget {
+            let balance = summary.caloriesEatenToday - summary.caloriesBurnedToday
+            lines.append("Примерная дневная норма: ~\(target) ккал. Баланс сегодня: \(balance > 0 ? "+" : "")\(balance) ккал.")
+        }
+        if !summary.mealsTodayText.isEmpty {
+            lines.append("Записи приёмов пищи сегодня — см. в блоке «ПРИЁМЫ ПИЩИ СЕГОДНЯ» ниже.")
+        } else {
+            lines.append("Записей приёмов пищи за сегодня нет.")
+        }
+        return lines.joined(separator: "\n")
     }
 
     private func habitsBlock(_ summary: WorkoutSummary) -> String {
@@ -1038,6 +1199,20 @@ final class GymBroManager {
                 }.joined(separator: "\n")
                 if summary.accountsBalanceText.isEmpty { summary.accountsBalanceText = "—" }
             }
+
+            // Еда / калории за сегодня (для советов по питанию)
+            summary.caloriesBurnedToday = CalorieCalculator.burnedOnDay(today, workouts: workouts, profile: profile)
+            summary.dailyCalorieTarget = CalorieCalculator.dailyTarget(profile: profile)
+            if let meals = try? ctx.fetch(FetchDescriptor<MealEntry>(sortBy: [SortDescriptor(\.date)])) {
+                let todayMeals = meals.filter { cal.isDate($0.date, inSameDayAs: today) }
+                summary.caloriesEatenToday = todayMeals.reduce(0) { $0 + $1.calories }
+                summary.mealsTodayText = todayMeals
+                    .sorted { ($0.mealTypeRaw, $0.date) < ($1.mealTypeRaw, $1.date) }
+                    .map { m in
+                        "\(m.mealType.rawValue): \(m.name) \(m.calories) ккал (Б \(Int(m.protein)) Ж \(Int(m.fat)) У \(Int(m.carbs)) г)"
+                    }
+                    .joined(separator: "\n")
+            }
         }
 
         summary.recentWorkoutsText = formatWorkouts(Array(recent.sorted { $0.date > $1.date }.prefix(20)))
@@ -1109,4 +1284,10 @@ private struct WorkoutSummary {
     var accountsBalanceText: String = ""
     var recentWorkoutsText: String = ""
     var pendingTodoTitles: [String] = []
+
+    // Еда / калории (для советов по питанию)
+    var caloriesEatenToday: Int = 0
+    var caloriesBurnedToday: Int = 0
+    var dailyCalorieTarget: Int? = nil
+    var mealsTodayText: String = ""
 }

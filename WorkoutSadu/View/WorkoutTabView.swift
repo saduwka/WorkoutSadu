@@ -25,6 +25,8 @@ struct HealthTabView: View {
                     })
                 case 2:
                     StatsView()
+                case 3:
+                    FoodView()
                 default:
                     WorkoutListView(
                         externalWorkout: $workoutFromTemplate,
@@ -41,7 +43,8 @@ struct HealthTabView: View {
             let tabs = [
                 ("Тренировки", "dumbbell.fill"),
                 ("Шаблоны", "doc.on.doc"),
-                ("Прогресс", "chart.line.uptrend.xyaxis")
+                ("Прогресс", "chart.line.uptrend.xyaxis"),
+                ("Еда", "fork.knife")
             ]
 
             ForEach(Array(tabs.enumerated()), id: \.offset) { i, tab in

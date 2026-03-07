@@ -198,6 +198,7 @@ struct TemplateDetailView: View {
                     statsHeader
                     exercisesList
                 }
+                .dismissKeyboardOnTap()
                 .padding(16)
                 .padding(.bottom, 90)
             }

@@ -61,6 +61,14 @@ extension View {
     func darkCard(accentBorder: Color? = nil) -> some View {
         modifier(DarkCardModifier(accentBorder: accentBorder))
     }
+
+    /// Тап по области закрывает клавиатуру (resign first responder).
+    func dismissKeyboardOnTap() -> some View {
+        self.contentShape(Rectangle())
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
+    }
 }
 
 // MARK: - Bebas Neue Font helper (falls back gracefully)

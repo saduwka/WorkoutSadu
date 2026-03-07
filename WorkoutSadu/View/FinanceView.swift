@@ -115,7 +115,7 @@ struct FinanceOverviewView: View {
             .sheet(isPresented: $showTransfer) { TransferBetweenAccountsSheet() }
             .sheet(item: $editingAccount) { acc in EditAccountSheet(account: acc) }
             .sheet(item: $pendingReceiptItem) { item in
-                PendingReceiptSheet(transactions: item.transactions) {
+                PendingReceiptSheet(transactions: item.transactions, accounts: accounts) { accountID in
                     for p in item.transactions {
                         let cat = FinanceCategory(rawValue: p.category) ?? .other
                         let type = FinanceType(rawValue: p.type) ?? .expense
@@ -125,7 +125,7 @@ struct FinanceOverviewView: View {
                             category: cat,
                             type: type,
                             date: p.date,
-                            accountID: nil
+                            accountID: accountID
                         )
                         context.insert(tx)
                     }
@@ -146,23 +146,10 @@ struct FinanceOverviewView: View {
     }
 
     private func checkPendingReceipt() {
-        // Уже подтвердили в Share Extension — сразу сохраняем в SwiftData без листа
+        // Подтвердили в Share Extension — показываем лист с выбором счёта, не сохраняем без счёта
         if PendingReceiptStorage.wasConfirmedInExtension(), let list = PendingReceiptStorage.load(), !list.isEmpty {
-            for p in list {
-                let cat = FinanceCategory(rawValue: p.category) ?? .other
-                let type = FinanceType(rawValue: p.type) ?? .expense
-                let tx = FinanceTransaction(
-                    name: p.name,
-                    amount: p.amount,
-                    category: cat,
-                    type: type,
-                    date: p.date,
-                    accountID: nil
-                )
-                context.insert(tx)
-            }
-            try? context.save()
-            PendingReceiptStorage.clear()
+            PendingReceiptStorage.clearConfirmedInExtensionFlag()
+            pendingReceiptItem = PendingReceiptSheetItem(transactions: list)
             return
         }
         if let list = PendingReceiptStorage.load(), !list.isEmpty {
@@ -538,10 +525,10 @@ struct AddAccountSheet: View {
                         }
                         .disabled(name.isEmpty)
                     }
+                    .dismissKeyboardOnTap()
                     .padding(16)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
             }
             .navigationTitle("НОВЫЙ СЧЁТ")
             .navigationBarTitleDisplayMode(.inline)
@@ -606,10 +593,10 @@ struct EditAccountSheet: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    .dismissKeyboardOnTap()
                     .padding(16)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
             }
             .navigationTitle(account.name.uppercased())
             .navigationBarTitleDisplayMode(.inline)
@@ -763,10 +750,10 @@ struct TransferBetweenAccountsSheet: View {
                         }
                         .disabled(!canSubmit)
                     }
+                    .dismissKeyboardOnTap()
                     .padding(16)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
             }
             .navigationTitle("ПЕРЕВОД")
             .navigationBarTitleDisplayMode(.inline)
@@ -869,8 +856,12 @@ struct TransferBetweenAccountsSheet: View {
 struct PendingReceiptSheet: View {
     @Environment(\.dismiss) private var dismiss
     let transactions: [PendingReceiptTransaction]
-    let onConfirm: () -> Void
+    let accounts: [FinanceAccount]
+    @State private var selectedAccountID: UUID?
+    let onConfirm: (UUID) -> Void
     let onCancel: () -> Void
+
+    private var canConfirm: Bool { !accounts.isEmpty && selectedAccountID != nil }
 
     private func formatAmount(_ value: Int) -> String {
         let f = NumberFormatter()
@@ -883,67 +874,112 @@ struct PendingReceiptSheet: View {
         NavigationStack {
             ZStack {
                 Color(hex: "#0e0e12").ignoresSafeArea()
-                VStack(spacing: 16) {
-                    Text("Добавить оплату из чека?")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(Color(hex: "#f0f0f5"))
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 8)
+                ScrollView {
+                    VStack(spacing: 16) {
+                        Text("Добавить оплату из чека?")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(Color(hex: "#f0f0f5"))
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 8)
 
-                    ForEach(Array(transactions.enumerated()), id: \.offset) { _, p in
-                        HStack {
-                            let cat = FinanceCategory(rawValue: p.category) ?? .other
-                            Image(systemName: cat.icon)
-                                .font(.system(size: 14))
-                                .foregroundStyle(Color(hex: cat.color))
-                                .frame(width: 32, height: 32)
-                                .background(Color(hex: cat.color).opacity(0.15))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(p.name)
-                                    .font(.system(size: 14, weight: .medium))
+                        ForEach(Array(transactions.enumerated()), id: \.offset) { _, p in
+                            HStack {
+                                let cat = FinanceCategory(rawValue: p.category) ?? .other
+                                Image(systemName: cat.icon)
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(Color(hex: cat.color))
+                                    .frame(width: 32, height: 32)
+                                    .background(Color(hex: cat.color).opacity(0.15))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(p.name)
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundStyle(Color(hex: "#f0f0f5"))
+                                    Text(p.category)
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(Color(hex: "#6b6b80"))
+                                }
+                                Spacer()
+                                Text("-\(formatAmount(p.amount))")
+                                    .font(.system(size: 15, weight: .bold, design: .monospaced))
                                     .foregroundStyle(Color(hex: "#f0f0f5"))
-                                Text(p.category)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(Color(hex: "#6b6b80"))
                             }
-                            Spacer()
-                            Text("-\(formatAmount(p.amount))")
-                                .font(.system(size: 15, weight: .bold, design: .monospaced))
-                                .foregroundStyle(Color(hex: "#f0f0f5"))
+                            .padding(14)
+                            .background(Color(hex: "#1a1a24"))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
-                        .padding(14)
-                        .background(Color(hex: "#1a1a24"))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
 
-                    Spacer(minLength: 20)
-
-                    HStack(spacing: 12) {
-                        Button { onCancel(); dismiss() } label: {
-                            Text("Отмена")
-                                .font(.system(size: 16, weight: .semibold))
+                        if !accounts.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("СЧЁТ")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(Color(hex: "#6b6b80"))
+                                    .tracking(1)
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(accounts) { acc in
+                                            Button { selectedAccountID = acc.id } label: {
+                                                HStack(spacing: 6) {
+                                                    Image(systemName: acc.icon)
+                                                        .font(.system(size: 12))
+                                                    Text(acc.name)
+                                                        .font(.system(size: 12, weight: .medium))
+                                                }
+                                                .foregroundStyle(selectedAccountID == acc.id ? .white : Color(hex: "#6b6b80"))
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 8)
+                                                .background(selectedAccountID == acc.id ? Color(hex: acc.colorHex) : Color(hex: "#1a1a24"))
+                                                .clipShape(Capsule())
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                }
+                                if selectedAccountID == nil {
+                                    Text("Выберите счёт для сохранения")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(Color(hex: "#ff5c3a"))
+                                }
+                            }
+                        } else {
+                            Text("Создайте счёт в разделе «Финансы»")
+                                .font(.system(size: 13))
                                 .foregroundStyle(Color(hex: "#6b6b80"))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(Color(hex: "#1a1a24"))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
-                        .buttonStyle(.plain)
-                        Button { onConfirm(); dismiss() } label: {
-                            Text("Добавить")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(Color(hex: "#ff5c3a"))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                        Spacer(minLength: 20)
+
+                        HStack(spacing: 12) {
+                            Button { onCancel(); dismiss() } label: {
+                                Text("Отмена")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(Color(hex: "#6b6b80"))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(Color(hex: "#1a1a24"))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                            .buttonStyle(.plain)
+                            Button {
+                                guard canConfirm, let id = selectedAccountID else { return }
+                                onConfirm(id)
+                                dismiss()
+                            } label: {
+                                Text("Добавить")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(canConfirm ? Color(hex: "#ff5c3a") : Color(hex: "#6b6b80").opacity(0.4))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                            .disabled(!canConfirm)
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
+                    .padding(16)
                 }
-                .padding(16)
             }
             .navigationTitle("Чек из Kaspi")
             .navigationBarTitleDisplayMode(.inline)

@@ -412,6 +412,7 @@ struct TodoListView: View {
                     }
                     .scrollDismissesKeyboard(.interactively)
                 }
+                .dismissKeyboardOnTap()
             }
             .navigationTitle("ЗАДАЧИ")
             .navigationBarTitleDisplayMode(.inline)
@@ -989,8 +990,7 @@ struct AddGoalSheet: View {
                 }
                 .padding(16)
             }
-            .contentShape(Rectangle())
-            .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+            .dismissKeyboardOnTap()
             .navigationTitle("Новая цель")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1140,6 +1140,7 @@ struct EditHabitSheet: View {
                             }
                         }
                     }
+                    .dismissKeyboardOnTap()
                     .padding(16)
                 }
                 .scrollDismissesKeyboard(.interactively)
@@ -1254,6 +1255,7 @@ struct EditTodoSheet: View {
                             }
                         }
                     }
+                    .dismissKeyboardOnTap()
                     .padding(16)
                 }
                 .scrollDismissesKeyboard(.interactively)
@@ -1360,10 +1362,9 @@ struct EditGoalSheet: View {
 
                     Spacer()
                 }
+                .dismissKeyboardOnTap()
                 .padding(16)
             }
-            .contentShape(Rectangle())
-            .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
             .navigationTitle("Редактировать")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -178,6 +178,7 @@ struct NewExerciseSheet: View {
                         footer: { Text("Запускается автоматически после каждого сета") }
                     }
                 }
+                .dismissKeyboardOnTap()
                 .scrollContentBackground(.hidden)
             }
             .navigationTitle("Новое упражнение")

@@ -268,6 +268,7 @@ struct ExerciseView: View {
                     }
                     .darkCard()
                 }
+                .dismissKeyboardOnTap()
                 .padding(16)
                 .padding(.bottom, 40)
             }
@@ -290,9 +291,18 @@ struct ExerciseView: View {
                 }
             }
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Готово") { removeIncompleteSets(); dismiss() }
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Color(hex: "#ff5c3a"))
+                HStack(spacing: 12) {
+                    Button {
+                        NotificationCenter.default.post(name: .openGymBroChat, object: nil)
+                    } label: {
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(Color(hex: "#4a8cff"))
+                    }
+                    Button("Готово") { removeIncompleteSets(); dismiss() }
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color(hex: "#ff5c3a"))
+                }
             }
         }
         .fullScreenCover(isPresented: $showImagePicker) { ImagePicker(workoutExercise: workoutExercise) }
@@ -312,6 +322,14 @@ struct ExerciseView: View {
             if let url = workoutExercise.exercise.gifURL, !url.isEmpty {
                 gifData = await ExerciseGifManager.shared.loadGif(from: url)
             }
+        }
+        .onAppear {
+            gymBro.screenContext = "Упражнение: \(workoutExercise.exercise.name)"
+            gymBro.screenContextImage = workoutExercise.photo
+        }
+        .onDisappear {
+            gymBro.screenContext = nil
+            gymBro.screenContextImage = nil
         }
         .preferredColorScheme(.dark)
     }
@@ -348,6 +366,11 @@ struct ExerciseView: View {
     }
     private func completeSet(_ set: WorkoutSet) {
         set.isCompleted = true; set.completedAt = Date()
+        // Если пользователь не нажал «Начать» — запускаем время тренировки при первом отмеченном подходе
+        if let w = workoutExercise.workout, w.startedAt == nil {
+            w.startedAt = set.completedAt
+            try? context.save()
+        }
         let isPR: Bool
         if let pr = PRManager.check(set: set, exercise: workoutExercise.exercise, in: context) {
             prResult = pr
@@ -357,22 +380,6 @@ struct ExerciseView: View {
         } else {
             isPR = false
         }
-
-        let setNumber = (sortedSets.firstIndex { $0.id == set.id } ?? 0) + 1
-        let prevSets = sortedSets
-            .filter { $0.isCompleted && $0.id != set.id }
-            .sorted { $0.order < $1.order }
-            .map { (weight: $0.weight, reps: $0.reps) }
-        gymBro.commentOnSet(
-            exerciseName: workoutExercise.exercise.name,
-            weight: set.weight,
-            reps: set.reps,
-            setNumber: setNumber,
-            isPR: isPR,
-            targetWeight: workoutExercise.targetWeight,
-            targetReps: workoutExercise.targetReps,
-            previousSets: prevSets
-        )
 
         if let s = workoutExercise.timerSeconds, s > 0 { timerManager.start(seconds: s, exerciseID: workoutExercise.id.uuidString) }
         if sortedSets.last?.id == set.id {

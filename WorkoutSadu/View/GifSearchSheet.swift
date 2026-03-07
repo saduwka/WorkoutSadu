@@ -37,6 +37,7 @@ struct GifSearchSheet: View {
                         resultsList
                     }
                 }
+                .dismissKeyboardOnTap()
             }
             .navigationTitle("Найти GIF")
             .navigationBarTitleDisplayMode(.inline)

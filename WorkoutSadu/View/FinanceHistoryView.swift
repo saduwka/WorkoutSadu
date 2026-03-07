@@ -68,6 +68,7 @@ struct FinanceHistoryView: View {
                     }
                     .scrollDismissesKeyboard(.interactively)
                 }
+                .dismissKeyboardOnTap()
             }
             .navigationTitle("ИСТОРИЯ")
             .navigationBarTitleDisplayMode(.inline)
@@ -243,6 +244,7 @@ private struct EditTransactionSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var transaction: FinanceTransaction
     let accounts: [FinanceAccount]
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         NavigationStack {
@@ -255,11 +257,12 @@ private struct EditTransactionSheet: View {
                         if !accounts.isEmpty { accountPicker }
                         detailsCard
                         categoryCard
+                        deleteButton
                     }
+                    .dismissKeyboardOnTap()
                     .padding(16)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
             }
             .navigationTitle("РЕДАКТИРОВАТЬ")
             .navigationBarTitleDisplayMode(.inline)
@@ -276,8 +279,35 @@ private struct EditTransactionSheet: View {
                     .foregroundStyle(Color(hex: "#ff5c3a"))
                 }
             }
+            .onAppear {
+                if transaction.accountID == nil, let first = accounts.first { transaction.accountID = first.id }
+            }
+            .alert("Удалить транзакцию?", isPresented: $showDeleteConfirm) {
+                Button("Отмена", role: .cancel) {}
+                Button("Удалить", role: .destructive) {
+                    context.delete(transaction)
+                    try? context.save()
+                    dismiss()
+                }
+            } message: {
+                Text("Запись «\(transaction.name)» будет удалена из истории. Отменить действие нельзя.")
+            }
         }
         .preferredColorScheme(.dark)
+    }
+
+    private var deleteButton: some View {
+        Button(role: .destructive) { showDeleteConfirm = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "trash.fill")
+                Text("Удалить транзакцию")
+            }
+            .font(.system(size: 16, weight: .medium))
+            .foregroundStyle(Color(hex: "#ff5c3a"))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+        }
+        .buttonStyle(.plain)
     }
 
     private var typeSelector: some View {
@@ -318,19 +348,6 @@ private struct EditTransactionSheet: View {
                 .padding(.horizontal, 4)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    Button {
-                        transaction.accountID = nil
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text("Без счёта")
-                                .font(.system(size: 12, weight: .medium))
-                        }
-                        .foregroundStyle(transaction.accountID == nil ? .white : Color(hex: "#6b6b80"))
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(transaction.accountID == nil ? Color(hex: "#6b6b80") : Color(hex: "#1a1a24"))
-                        .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
                     ForEach(accounts) { acc in
                         Button {
                             transaction.accountID = acc.id

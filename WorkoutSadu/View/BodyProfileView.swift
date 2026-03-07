@@ -40,6 +40,7 @@ struct BodyProfileView: View {
                         // Data management
                         dataManagementCard
                     }
+                    .dismissKeyboardOnTap()
                     .padding(16)
                     .padding(.bottom, 40)
                 }
@@ -289,6 +290,7 @@ struct BodyProfileEditView: View {
                         if showFat { field("% жира", text: $fatText, keyboard: .decimalPad) }
                     }
                 }
+                .dismissKeyboardOnTap()
                 .scrollContentBackground(.hidden)
                 .scrollDismissesKeyboard(.interactively)
             }

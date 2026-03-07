@@ -1,5 +1,6 @@
 import Foundation
 import FirebaseAI
+import UIKit
 
 struct ParsedFood: Identifiable {
     let id = UUID()
@@ -62,6 +63,43 @@ final class NutritionAIService {
             throw NutritionError.emptyResponse
         }
 
+        return try decodeResponse(text)
+    }
+
+    /// Распознаёт еду по фото и возвращает КБЖУ (Gemini multimodal).
+    func parse(imageData: Data, profile: BodyProfile? = nil) async throws -> [ParsedFood] {
+        guard let uiImage = UIImage(data: imageData) else {
+            throw NutritionError.emptyResponse
+        }
+        var profileContext = ""
+        if let p = profile {
+            var parts: [String] = []
+            if p.weight > 0 { parts.append("вес \(String(format: "%.0f", p.weight)) кг") }
+            if p.height > 0 { parts.append("рост \(String(format: "%.0f", p.height)) см") }
+            if p.age > 0 { parts.append("возраст \(p.age) лет") }
+            if !parts.isEmpty {
+                profileContext = "\nПрофиль пользователя: \(parts.joined(separator: ", ")). Учитывай при оценке порций."
+            }
+        }
+        let prompt = """
+        На фото еда/тарелка. Оцени что на изображении и посчитай КБЖУ (калории, белки, жиры, углеводы) для всего что видишь.
+        \(profileContext)
+
+        Верни ТОЛЬКО JSON массив продуктов, без markdown, без пояснений.
+        Формат:
+        [{"name":"Название блюда/продукта","grams":200,"calories":330,"protein":62.0,"fat":7.0,"carbs":0.0}]
+
+        Правила:
+        - calories — целое число (ккал)
+        - protein, fat, carbs — числа с плавающей точкой (граммы)
+        - grams — примерный вес порции в граммах
+        - Названия на русском
+        - ТОЛЬКО JSON массив, ничего больше
+        """
+        let response = try await getModel().generateContent([prompt, uiImage])
+        guard let text = response.text?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            throw NutritionError.emptyResponse
+        }
         return try decodeResponse(text)
     }
 

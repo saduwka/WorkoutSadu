@@ -21,15 +21,28 @@ struct FinanceAddTransactionView: View {
                     VStack(spacing: 14) {
                         typeSelector
                         amountCard
-                        if !accounts.isEmpty { accountPicker }
+                        if !accounts.isEmpty {
+                            accountPicker
+                            if selectedAccountID == nil {
+                                Text("Выберите счёт для сохранения")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Color(hex: "#ff5c3a"))
+                            }
+                        } else {
+                            Text("Создайте счёт в разделе «Финансы», чтобы добавлять транзакции")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color(hex: "#6b6b80"))
+                                .multilineTextAlignment(.center)
+                                .padding(.vertical, 8)
+                        }
                         detailsCard
                         categoryCard
                         saveButton
                     }
+                    .dismissKeyboardOnTap()
                     .padding(16)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
             }
             .navigationTitle("НОВАЯ ЗАПИСЬ")
             .navigationBarTitleDisplayMode(.inline)
@@ -182,16 +195,23 @@ struct FinanceAddTransactionView: View {
 
     // MARK: - Save
 
+    private var canSave: Bool {
+        guard let amount = Int(amountText), amount > 0 else { return false }
+        guard !accounts.isEmpty else { return false }
+        return selectedAccountID != nil
+    }
+
     private var saveButton: some View {
         Button {
-            guard let amount = Int(amountText), amount > 0 else { return }
+            guard canSave, let accountID = selectedAccountID else { return }
+            let amount = Int(amountText) ?? 0
             let tx = FinanceTransaction(
                 name: name.isEmpty ? selectedCategory.rawValue : name,
                 amount: amount,
                 category: selectedCategory,
                 type: selectedType,
                 date: date,
-                accountID: selectedAccountID
+                accountID: accountID
             )
             context.insert(tx)
             try? context.save()
@@ -203,12 +223,12 @@ struct FinanceAddTransactionView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
                 .background(
-                    amountText.isEmpty
-                        ? Color(hex: "#6b6b80").opacity(0.4)
-                        : Color(hex: "#ff5c3a")
+                    canSave
+                        ? Color(hex: "#ff5c3a")
+                        : Color(hex: "#6b6b80").opacity(0.4)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 14))
         }
-        .disabled(amountText.isEmpty)
+        .disabled(!canSave)
     }
 }

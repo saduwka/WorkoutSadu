@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 // MARK: - Root overlay
 
@@ -119,28 +120,44 @@ struct GymBroChatScreen: View {
     @State private var inputText = ""
     @State private var attachedWorkouts: [Workout] = []
     @State private var attachedTemplates: [WorkoutTemplate] = []
+    @State private var attachedImages: [(id: UUID, data: Data)] = []
     @State private var showAttachmentPicker = false
+    @State private var showPhotoPicker = false
     @State private var isAtBottom = true
     @State private var showChatList = false
     @FocusState private var isInputFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
     private var hasAttachments: Bool {
-        !attachedWorkouts.isEmpty || !attachedTemplates.isEmpty
+        !attachedWorkouts.isEmpty || !attachedTemplates.isEmpty || !attachedImages.isEmpty
     }
     private var totalAttachments: Int {
-        attachedWorkouts.count + attachedTemplates.count
+        attachedWorkouts.count + attachedTemplates.count + attachedImages.count
     }
+    private var attachedImagesData: [Data] { attachedImages.map(\.data) }
 
     var body: some View {
         VStack(spacing: 0) {
             chatHeader
             insightChips
+            if manager.screenContextImage != nil {
+                HStack(spacing: 6) {
+                    Image(systemName: "photo.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(hex: "#4a8cff"))
+                    Text("Фото упражнения будет отправлено с сообщением")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(hex: "#6b6b80"))
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 4)
+            }
             messagesArea
             if !isInputFocused { quickAsks }
             if hasAttachments { attachedChips }
             inputRow
         }
+        .dismissKeyboardOnTap()
         .background(Color(hex: "#111118").ignoresSafeArea())
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showAttachmentPicker) {
@@ -162,6 +179,11 @@ struct GymBroChatScreen: View {
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showPhotoPicker) {
+            ChatPhotoPickerSheet(selectedImages: $attachedImages)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -274,14 +296,29 @@ struct GymBroChatScreen: View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottomTrailing) {
                 ScrollView {
-                    LazyVStack(spacing: 12) {
-                        if manager.messages.isEmpty && manager.isLoading {
-                            HStack(spacing: 8) {
+                    VStack(spacing: 12) {
+                        if manager.isLoading || !manager.streamingText.isEmpty {
+                            HStack(alignment: .bottom, spacing: 9) {
                                 aiAvatar
-                                typingBubble
-                                Spacer()
+                                if manager.streamingText.isEmpty {
+                                    typingBubble
+                                } else {
+                                    Text(manager.streamingText)
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(Color(hex: "#eeeef5"))
+                                        .lineSpacing(3)
+                                        .padding(.horizontal, 13)
+                                        .padding(.vertical, 10)
+                                        .background(Color(hex: "#18181f"))
+                                        .clipShape(UnevenRoundedRectangle(
+                                            topLeadingRadius: 4, bottomLeadingRadius: 14,
+                                            bottomTrailingRadius: 14, topTrailingRadius: 14
+                                        ))
+                                }
+                                Spacer(minLength: 40)
                             }
                             .padding(.horizontal, 14)
+                            .id("typing")
                         }
 
                         ForEach(manager.messages) { msg in
@@ -305,16 +342,6 @@ struct GymBroChatScreen: View {
                                 }
                             }
                             .id(msg.id.uuidString)
-                        }
-
-                        if manager.isLoading && !manager.messages.isEmpty {
-                            HStack(spacing: 8) {
-                                aiAvatar
-                                typingBubble
-                                Spacer()
-                            }
-                            .padding(.horizontal, 14)
-                            .id("typing")
                         }
 
                         if let err = manager.errorMessage {
@@ -358,26 +385,15 @@ struct GymBroChatScreen: View {
                     }
                 }
                 .onChange(of: manager.messages.count) { _, _ in
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        proxy.scrollTo("bottom")
+                    // Задержка 0.2s — дать LazyVStack отрендерить новую ячейку; без анимации, чтобы не конфликтовать с layout
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        proxy.scrollTo("bottom", anchor: .bottom)
                     }
                 }
-                .onChange(of: manager.isLoading) { _, loading in
-                    if loading {
-                        withAnimation(.easeOut(duration: 0.25)) {
-                            proxy.scrollTo("typing")
-                        }
-                    }
+                .onChange(of: manager.isLoading) { _, _ in
+                    // isLoading меняется вместе с messages.count — скролл уже в onChange(messages.count)
                 }
-                .onChange(of: isInputFocused) { _, focused in
-                    if focused {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            withAnimation(.easeOut(duration: 0.25)) {
-                                proxy.scrollTo("bottom")
-                            }
-                        }
-                    }
-                }
+                // Не скроллить при фокусе на поле ввода: клавиатура меняет layout, scrollTo даёт сбой и сообщения «пропадают»
 
                 if !isAtBottom {
                     Button {
@@ -400,7 +416,6 @@ struct GymBroChatScreen: View {
                     .transition(.scale.combined(with: .opacity))
                 }
             }
-            .animation(.easeOut(duration: 0.2), value: isAtBottom)
         }
     }
 
@@ -487,6 +502,15 @@ struct GymBroChatScreen: View {
                         }
                     }
                 }
+                ForEach(attachedImages, id: \.id) { item in
+                    if let uiImage = UIImage(data: item.data) {
+                        imageAttachmentChip(uiImage: uiImage) {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                attachedImages.removeAll { $0.id == item.id }
+                            }
+                        }
+                    }
+                }
             }
             .padding(.horizontal, 14)
         }
@@ -516,6 +540,24 @@ struct GymBroChatScreen: View {
         .overlay(Capsule().stroke(color.opacity(0.25), lineWidth: 1))
     }
 
+    private func imageAttachmentChip(uiImage: UIImage, onRemove: @escaping () -> Void) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(hex: "#55556a").opacity(0.3), lineWidth: 1))
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.white)
+                    .background(Circle().fill(Color.black.opacity(0.6)))
+            }
+            .offset(x: 4, y: -4)
+        }
+    }
+
     // MARK: - Input row
 
     private var inputRow: some View {
@@ -539,6 +581,15 @@ struct GymBroChatScreen: View {
                             .offset(x: 3, y: -1)
                     }
                 }
+            }
+
+            Button {
+                showPhotoPicker = true
+            } label: {
+                Image(systemName: "photo")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(attachedImages.isEmpty ? Color(hex: "#55556a") : Color(hex: "#4a8cff"))
+                    .frame(width: 36, height: 36)
             }
 
             if isInputFocused {
@@ -598,10 +649,12 @@ struct GymBroChatScreen: View {
         guard !text.isEmpty else { return }
         let attached = attachedWorkouts
         let attachedTmpls = attachedTemplates
+        let images = attachedImagesData
         inputText = ""
         attachedWorkouts = []
         attachedTemplates = []
-        manager.send(text: text, workouts: workouts, templates: templates, profile: profile, attached: attached, attachedTemplates: attachedTmpls)
+        attachedImages = []
+        manager.send(text: text, workouts: workouts, templates: templates, profile: profile, attached: attached, attachedTemplates: attachedTmpls, attachedImages: images)
     }
 }
 
@@ -630,6 +683,17 @@ private struct TypingDotsView: View {
 }
 
 // MARK: - Message Row
+
+/// Рендерит текст с поддержкой **жирного** (markdown-style).
+private func markdownText(_ s: String) -> Text {
+    let parts = s.split(separator: "**", omittingEmptySubsequences: false).map(String.init)
+    guard !parts.isEmpty else { return Text(verbatim: "") }
+    var result = Text(verbatim: parts[0])
+    for i in 1..<parts.count {
+        result = i % 2 == 1 ? result + Text(verbatim: parts[i]).bold() : result + Text(verbatim: parts[i])
+    }
+    return result
+}
 
 struct MessageRow: View {
     let message: GymBroMessage
@@ -670,7 +734,7 @@ struct MessageRow: View {
     }
 
     private var aiBubble: some View {
-        Text(message.text)
+        markdownText(message.text)
             .font(.system(size: 13))
             .foregroundStyle(Color(hex: "#eeeef5"))
             .lineSpacing(3)
@@ -693,26 +757,41 @@ struct MessageRow: View {
     }
 
     private var userBubble: some View {
-        Text(message.text)
-            .font(.system(size: 13))
-            .foregroundStyle(Color(hex: "#eeeef5"))
-            .lineSpacing(3)
-            .padding(.horizontal, 13)
-            .padding(.vertical, 10)
-            .background(Color(hex: "#ff4a2a").opacity(0.13))
-            .clipShape(
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 14, bottomLeadingRadius: 14,
-                    bottomTrailingRadius: 4, topTrailingRadius: 14
-                )
+        VStack(alignment: .trailing, spacing: 6) {
+            if !message.attachedImageData.isEmpty {
+                HStack(spacing: 4) {
+                    ForEach(Array(message.attachedImageData.enumerated()), id: \.offset) { _, data in
+                        if let uiImage = UIImage(data: data) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+                }
+            }
+            markdownText(message.text)
+                .font(.system(size: 13))
+                .foregroundStyle(Color(hex: "#eeeef5"))
+                .lineSpacing(3)
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 10)
+        .background(Color(hex: "#ff4a2a").opacity(0.13))
+        .clipShape(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 14, bottomLeadingRadius: 14,
+                bottomTrailingRadius: 4, topTrailingRadius: 14
             )
-            .overlay(
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 14, bottomLeadingRadius: 14,
-                    bottomTrailingRadius: 4, topTrailingRadius: 14
-                )
-                .stroke(Color(hex: "#ff4a2a").opacity(0.2), lineWidth: 1)
+        )
+        .overlay(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 14, bottomLeadingRadius: 14,
+                bottomTrailingRadius: 4, topTrailingRadius: 14
             )
+            .stroke(Color(hex: "#ff4a2a").opacity(0.2), lineWidth: 1)
+        )
     }
 }
 
@@ -995,6 +1074,120 @@ struct ChatListSheet: View {
             } label: {
                 Label("Удалить", systemImage: "trash")
             }
+        }
+    }
+}
+
+// MARK: - Chat Photo Picker Sheet (добавление фото в чат Life Bro)
+
+struct ChatPhotoPickerSheet: View {
+    @Binding var selectedImages: [(id: UUID, data: Data)]
+    @Environment(\.dismiss) private var dismiss
+    @State private var showImagePicker = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                if selectedImages.isEmpty {
+                    Text("Добавь фото — Life Bro учтёт их в ответе")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color(hex: "#6b6b80"))
+                        .padding(.vertical, 24)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(selectedImages, id: \.id) { item in
+                                ZStack(alignment: .topTrailing) {
+                                    if let uiImage = UIImage(data: item.data) {
+                                        Image(uiImage: uiImage)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 80, height: 80)
+                                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    }
+                                    Button {
+                                        selectedImages = selectedImages.filter { $0.id != item.id }
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 20))
+                                            .foregroundStyle(.white)
+                                            .shadow(radius: 2)
+                                    }
+                                    .offset(x: 6, y: -6)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                    .padding(.vertical, 12)
+                }
+                Button {
+                    showImagePicker = true
+                } label: {
+                    Label("Добавить фото", systemImage: "photo.badge.plus")
+                        .font(.system(size: 15, weight: .medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color(hex: "#4a8cff").opacity(0.2))
+                        .foregroundStyle(Color(hex: "#4a8cff"))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+                Spacer(minLength: 0)
+            }
+            .background(Color(hex: "#111118"))
+            .navigationTitle("Фото в чат")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Готово") { dismiss() }
+                        .foregroundStyle(Color(hex: "#4a8cff"))
+                }
+            }
+            .fullScreenCover(isPresented: $showImagePicker) {
+                ChatImagePickerView(
+                    onPick: { data in
+                        selectedImages = selectedImages + [(id: UUID(), data: data)]
+                        showImagePicker = false
+                    },
+                    onDismiss: { showImagePicker = false }
+                )
+            }
+        }
+    }
+}
+
+private struct ChatImagePickerView: UIViewControllerRepresentable {
+    var onPick: (Data) -> Void
+    var onDismiss: () -> Void
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = .photoLibrary
+        picker.mediaTypes = ["public.image"]
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: ChatImagePickerView
+        init(_ parent: ChatImagePickerView) { self.parent = parent }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage,
+               let data = image.jpegData(compressionQuality: 0.8) {
+                parent.onPick(data)
+            }
+            parent.onDismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.onDismiss()
         }
     }
 }

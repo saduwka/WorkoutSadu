@@ -54,4 +54,9 @@ enum PendingReceiptStorage {
     static func wasConfirmedInExtension() -> Bool {
         userDefaults?.bool(forKey: confirmedInExtensionKey) ?? false
     }
+
+    /// Сбросить только флаг «подтверждено в расширении», не трогая список транзакций (для показа листа с выбором счёта).
+    static func clearConfirmedInExtensionFlag() {
+        userDefaults?.set(false, forKey: confirmedInExtensionKey)
+    }
 }

@@ -6,6 +6,7 @@ import WidgetKit
 struct CreateWorkoutView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
+    @Environment(GymBroManager.self) private var gymBro
     @Bindable var workout: Workout
     @State private var showExercisePicker = false
     @State private var showDiscardAlert = false
@@ -124,6 +125,7 @@ struct CreateWorkoutView: View {
                         }
                         .darkCard()
                     }
+                    .dismissKeyboardOnTap()
                     .padding(16)
                     .padding(.bottom, 40)
                 }
@@ -186,7 +188,11 @@ struct CreateWorkoutView: View {
             .onAppear {
                 if workout.startedAt != nil { workoutStarted = true; startElapsedTimer() }
             }
-            .onDisappear { stopElapsedTimer() }
+            .onChange(of: workout.startedAt) { _, newVal in
+                if newVal != nil, !workoutStarted { workoutStarted = true; startElapsedTimer() }
+            }
+            .onAppear { gymBro.screenContext = workout.name.isEmpty ? "Тренировка (новая)" : "Тренировка: \(workout.name)" }
+            .onDisappear { gymBro.screenContext = nil; stopElapsedTimer() }
         }
         .preferredColorScheme(.dark)
     }

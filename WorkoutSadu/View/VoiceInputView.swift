@@ -27,6 +27,16 @@ struct VoiceInputView: View {
                         if let err = errorMessage { errorView(err) }
                         if didParse && !parsed.isEmpty { resultsCard }
                         if didParse && !parsed.isEmpty && !accounts.isEmpty { voiceAccountPicker }
+                        if didParse && !parsed.isEmpty && !accounts.isEmpty && selectedAccountID == nil {
+                            Text("Выберите счёт для сохранения")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color(hex: "#ff5c3a"))
+                        }
+                        if didParse && !parsed.isEmpty && accounts.isEmpty {
+                            Text("Создайте счёт в разделе «Финансы»")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color(hex: "#6b6b80"))
+                        }
                         if didParse && !parsed.isEmpty { saveButton }
                         if permissionDenied { permissionView }
                     }
@@ -229,8 +239,13 @@ struct VoiceInputView: View {
 
     // MARK: - Save
 
+    private var canSaveVoice: Bool {
+        !parsed.isEmpty && !accounts.isEmpty && selectedAccountID != nil
+    }
+
     private var saveButton: some View {
         Button {
+            guard canSaveVoice, let accountID = selectedAccountID else { return }
             for entry in parsed {
                 let cat = FinanceCategory(rawValue: entry.category) ?? .other
                 let type = FinanceType(rawValue: entry.type) ?? .expense
@@ -240,7 +255,7 @@ struct VoiceInputView: View {
                     category: cat,
                     type: type,
                     date: entry.date ?? Date(),
-                    accountID: selectedAccountID
+                    accountID: accountID
                 )
                 context.insert(tx)
             }
@@ -252,9 +267,10 @@ struct VoiceInputView: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
-                .background(Color(hex: "#ff5c3a"))
+                .background(canSaveVoice ? Color(hex: "#ff5c3a") : Color(hex: "#6b6b80").opacity(0.4))
                 .clipShape(RoundedRectangle(cornerRadius: 14))
         }
+        .disabled(!canSaveVoice)
     }
 
     // MARK: - Parse

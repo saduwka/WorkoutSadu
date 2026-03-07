@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct AddMealView: View {
     @Environment(\.modelContext) private var context
@@ -12,6 +13,7 @@ struct AddMealView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var didParse = false
+    @State private var showImagePicker = false
 
     var body: some View {
         NavigationStack {
@@ -30,6 +32,7 @@ struct AddMealView: View {
                             saveButton
                         }
                     }
+                    .dismissKeyboardOnTap()
                     .padding(16)
                     .padding(.bottom, 40)
                 }
@@ -41,6 +44,12 @@ struct AddMealView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Отмена") { dismiss() }
                         .foregroundStyle(Color(hex: "#6b6b80"))
+                }
+            }
+            .sheet(isPresented: $showImagePicker) {
+                FoodPhotoPicker { data in
+                    showImagePicker = false
+                    Task { await parseFood(from: data) }
                 }
             }
             .preferredColorScheme(.dark)
@@ -74,6 +83,24 @@ struct AddMealView: View {
             }
             .disabled(foodText.trimmingCharacters(in: .whitespaces).isEmpty || isLoading)
             .opacity(foodText.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
+
+            Button {
+                showImagePicker = true
+            } label: {
+                HStack {
+                    Image(systemName: "camera.fill")
+                    Text("По фото")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundStyle(Color(hex: "#ff5c3a"))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color(hex: "#ff5c3a").opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            .disabled(isLoading)
             .padding(.horizontal, 16)
             .padding(.bottom, 14)
         }
@@ -268,6 +295,19 @@ struct AddMealView: View {
         isLoading = false
     }
 
+    private func parseFood(from imageData: Data) async {
+        isLoading = true
+        errorMessage = nil
+        do {
+            let results = try await NutritionAIService.shared.parse(imageData: imageData, profile: profiles.first)
+            parsedFoods = results
+            didParse = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isLoading = false
+    }
+
     private func saveMeals() {
         for food in parsedFoods {
             let entry = MealEntry(
@@ -282,5 +322,41 @@ struct AddMealView: View {
             context.insert(entry)
         }
         try? context.save()
+    }
+}
+
+// MARK: - Photo picker for food (возвращает Data выбранного фото)
+
+struct FoodPhotoPicker: UIViewControllerRepresentable {
+    var onPick: (Data) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = .photoLibrary
+        picker.mediaTypes = ["public.image"]
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: FoodPhotoPicker
+        init(_ parent: FoodPhotoPicker) { self.parent = parent }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage,
+               let data = image.jpegData(compressionQuality: 0.8) {
+                parent.onPick(data)
+            }
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
     }
 }

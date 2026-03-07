@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import Foundation
 import UIKit
+import WidgetKit
 
 struct WorkoutDetailView: View {
     @Bindable var workout: Workout
@@ -9,6 +10,7 @@ struct WorkoutDetailView: View {
     @Query private var profiles: [BodyProfile]
     @State private var shareURL: URL?
     @State private var showTemplateSaved = false
+    @State private var showEditTimeSheet = false
 
     private var dateStr: String {
         let f = DateFormatter(); f.dateStyle = .long; f.timeStyle = .short
@@ -91,6 +93,9 @@ struct WorkoutDetailView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
+                    Button { showEditTimeSheet = true } label: {
+                        Label("Редактировать время", systemImage: "clock.arrow.circlepath")
+                    }
                     Button { saveAsTemplate() } label: {
                         Label("Сохранить шаблон", systemImage: "doc.on.doc")
                     }
@@ -107,6 +112,9 @@ struct WorkoutDetailView: View {
         } message: { Text("'\(workout.name)' добавлен в шаблоны.") }
         .sheet(isPresented: Binding(get: { shareURL != nil }, set: { if !$0 { shareURL = nil } })) {
             if let url = shareURL { ActivityViewController(activityItems: [url]) }
+        }
+        .sheet(isPresented: $showEditTimeSheet) {
+            EditWorkoutTimeSheet(workout: workout)
         }
         .preferredColorScheme(.dark)
     }
@@ -161,6 +169,92 @@ struct WorkoutDetailView: View {
         .overlay(alignment: .bottom) {
             Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5).padding(.leading, 16)
         }
+    }
+}
+
+// MARK: - Edit workout time (для исправления начала/конца, если не нажали «Начать»)
+
+struct EditWorkoutTimeSheet: View {
+    @Bindable var workout: Workout
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @State private var editStartedAt: Date
+    @State private var editFinishedAt: Date
+
+    init(workout: Workout) {
+        self._workout = Bindable(wrappedValue: workout)
+        let cal = Calendar.current
+        let dayStart = cal.startOfDay(for: workout.date)
+        _editStartedAt = State(initialValue: workout.startedAt ?? dayStart)
+        _editFinishedAt = State(initialValue: workout.finishedAt ?? workout.date)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color(hex: "#0e0e12").ignoresSafeArea()
+                VStack(spacing: 20) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("НАЧАЛО ТРЕНИРОВКИ")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Color(hex: "#6b6b80"))
+                            .tracking(1)
+                        DatePicker("", selection: $editStartedAt, displayedComponents: [.date, .hourAndMinute])
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                            .tint(Color(hex: "#ff5c3a"))
+                    }
+                    .padding(16)
+                    .darkCard()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("КОНЕЦ ТРЕНИРОВКИ")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Color(hex: "#6b6b80"))
+                            .tracking(1)
+                        DatePicker("", selection: $editFinishedAt, displayedComponents: [.date, .hourAndMinute])
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                            .tint(Color(hex: "#ff5c3a"))
+                    }
+                    .padding(16)
+                    .darkCard()
+
+                    if editFinishedAt < editStartedAt {
+                        Text("Конец должен быть позже начала")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color(hex: "#ff5c3a"))
+                    }
+
+                    Spacer()
+                }
+                .padding(16)
+            }
+            .navigationTitle("РЕДАКТИРОВАТЬ ВРЕМЯ")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") { dismiss() }
+                        .foregroundStyle(Color(hex: "#6b6b80"))
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Готово") { saveAndDismiss() }
+                        .foregroundStyle(Color(hex: "#ff5c3a"))
+                        .disabled(editFinishedAt < editStartedAt)
+                }
+            }
+            .preferredColorScheme(.dark)
+        }
+    }
+
+    private func saveAndDismiss() {
+        guard editFinishedAt >= editStartedAt else { return }
+        workout.startedAt = editStartedAt
+        workout.finishedAt = editFinishedAt
+        try? context.save()
+        WidgetDataManager.sync(context: context)
+        WidgetCenter.shared.reloadAllTimelines()
+        dismiss()
     }
 }
 
