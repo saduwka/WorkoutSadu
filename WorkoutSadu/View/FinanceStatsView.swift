@@ -110,7 +110,7 @@ struct FinanceStatsView: View {
 
     private func statMini(_ title: String, _ value: Int, _ color: Color) -> some View {
         VStack(spacing: 4) {
-            Text(formatAmount(abs(value)))
+            Text(formatAmount(value))
                 .font(.system(size: 15, weight: .bold, design: .monospaced))
                 .foregroundStyle(color)
                 .lineLimit(1).minimumScaleFactor(0.6)

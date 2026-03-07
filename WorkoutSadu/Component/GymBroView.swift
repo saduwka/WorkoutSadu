@@ -385,8 +385,8 @@ struct GymBroChatScreen: View {
                     }
                 }
                 .onChange(of: manager.messages.count) { _, _ in
-                    // Задержка 0.2s — дать LazyVStack отрендерить новую ячейку; без анимации, чтобы не конфликтовать с layout
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    // Небольшая задержка — дать контенту отрендерить новую ячейку; один scrollTo("bottom"), без "typing"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                         proxy.scrollTo("bottom", anchor: .bottom)
                     }
                 }

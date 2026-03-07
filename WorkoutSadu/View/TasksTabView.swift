@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct TasksTabView: View {
+    @Environment(\.modelContext) private var context
     @State private var section: Int = 0
 
     var body: some View {
@@ -18,6 +19,18 @@ struct TasksTabView: View {
             }
         }
         .background(Color(hex: "#0e0e12"))
+        .onAppear { renewWeeklyGoalsIfNeeded() }
+    }
+
+    /// Сброс currentCount и weekStart у целей при смене периода (при открытии вкладки).
+    private func renewWeeklyGoalsIfNeeded() {
+        let descriptor = FetchDescriptor<WeeklyGoal>()
+        guard let goals = try? context.fetch(descriptor) else { return }
+        var changed = false
+        for goal in goals {
+            if goal.renewIfNeeded() { changed = true }
+        }
+        if changed { try? context.save() }
     }
 
     private var sectionPicker: some View {
@@ -146,7 +159,8 @@ struct HabitsView: View {
             let weeks = 12
             let cal = Calendar.current
             let today = cal.startOfDay(for: Date())
-            let todayWeekday = (cal.component(.weekday, from: today) + 5) % 7
+            // Локаль: первый день недели (воскресенье=1, понедельник=2 и т.д.)
+            let todayWeekday = (cal.component(.weekday, from: today) - cal.firstWeekday + 7) % 7
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 3) {
@@ -349,28 +363,26 @@ struct TodoListView: View {
 
     private let cal = Calendar.current
 
+    /// Задачи на выбранную дату + inbox (без dueDate всегда видны).
     private var todosForSelectedDate: [TodoItem] {
-        let isToday = cal.isDateInToday(selectedDate)
         return allTodos.filter { todo in
             if let due = todo.dueDate {
                 return cal.isDate(due, inSameDayAs: selectedDate)
             }
-            if isToday { return !todo.completed }
-            return false
+            // Задачи без даты — inbox, всегда видны
+            return true
         }
     }
 
     private var pendingForDate: [TodoItem] { todosForSelectedDate.filter { !$0.completed } }
     private var completedForDate: [TodoItem] { todosForSelectedDate.filter { $0.completed } }
 
+    /// Количество невыполненных задач на дату (только с dueDate; inbox не привязан к дате).
     private func todoCount(on date: Date) -> Int {
-        let isToday = cal.isDateInToday(date)
         return allTodos.filter { todo in
             guard !todo.completed else { return false }
-            if let due = todo.dueDate {
-                return cal.isDate(due, inSameDayAs: date)
-            }
-            return isToday
+            guard let due = todo.dueDate else { return false }
+            return cal.isDate(due, inSameDayAs: date)
         }.count
     }
 
@@ -527,7 +539,7 @@ struct TodoListView: View {
               let range = cal.range(of: .day, in: .month, for: firstDay) else { return [] }
 
         var weekday = cal.component(.weekday, from: firstDay)
-        weekday = (weekday + 5) % 7
+        weekday = (weekday - cal.firstWeekday + 7) % 7
 
         var days: [Date?] = Array(repeating: nil, count: weekday)
         for day in range {
@@ -1063,6 +1075,8 @@ struct EditHabitSheet: View {
                                         .foregroundStyle(Color(hex: "#f0f0f5"))
                                     Spacer()
                                     Button {
+                                        habit.linkedTodos.removeAll { $0.id == todo.id }
+                                        todo.habit = nil
                                         context.delete(todo)
                                         try? context.save()
                                     } label: {

@@ -396,7 +396,7 @@ struct FinanceOverviewView: View {
         let f = NumberFormatter()
         f.numberStyle = .decimal
         f.groupingSeparator = " "
-        return f.string(from: NSNumber(value: abs(value))) ?? "\(abs(value))"
+        return f.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
     private func formatSigned(_ value: Int) -> String {
@@ -646,7 +646,7 @@ struct TransferBetweenAccountsSheet: View {
         let f = NumberFormatter()
         f.numberStyle = .decimal
         f.groupingSeparator = " "
-        return f.string(from: NSNumber(value: abs(value))) ?? "\(abs(value))"
+        return f.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
     var body: some View {
@@ -867,7 +867,7 @@ struct PendingReceiptSheet: View {
         let f = NumberFormatter()
         f.numberStyle = .decimal
         f.groupingSeparator = " "
-        return f.string(from: NSNumber(value: abs(value))) ?? "\(abs(value))"
+        return f.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
     var body: some View {
