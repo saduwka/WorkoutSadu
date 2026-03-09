@@ -2,6 +2,7 @@ import UIKit
 import SwiftUI
 import UniformTypeIdentifiers
 import Combine
+import CoreFoundation
 
 /// Share Extension: «Это оплата?» → Да → извлечь текст из PDF/фото → сохранить в App Group → «Чек успешно добавлен. Продолжите в приложении» → закрыть.
 final class ShareViewController: UIViewController {
@@ -160,6 +161,7 @@ final class ShareViewController: UIViewController {
                     currentStep = .parsed(item)
                 } else {
                     ExtensionStorage.savePendingText(text)
+                    postReceiptSavedDarwinNotification()
                     currentStep = .success
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                         self?.finish(success: true)
@@ -169,6 +171,18 @@ final class ShareViewController: UIViewController {
                 currentStep = .error(error.localizedDescription)
             }
         }
+    }
+
+    private static let receiptSavedDarwinName = "com.saduwka.WorkoutSadu.receiptSaved"
+
+    private func postReceiptSavedDarwinNotification() {
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            CFNotificationName(rawValue: Self.receiptSavedDarwinName as CFString),
+            nil,
+            nil,
+            true
+        )
     }
 
     private func finish(success: Bool = false, error: String? = nil) {
@@ -191,6 +205,7 @@ final class ShareViewController: UIViewController {
             date: item.date
         )
         ExtensionStorage.saveConfirmedTransactions([finalItem])
+        postReceiptSavedDarwinNotification()
         currentStep = .success
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             self?.finish(success: true)
@@ -200,6 +215,7 @@ final class ShareViewController: UIViewController {
     private func savePendingAndFinish() {
         if let text = lastExtractedText {
             ExtensionStorage.savePendingText(text)
+            postReceiptSavedDarwinNotification()
         }
         currentStep = .skipToApp
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in

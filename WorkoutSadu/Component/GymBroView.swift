@@ -300,20 +300,27 @@ struct GymBroChatScreen: View {
                         if manager.isLoading || !manager.streamingText.isEmpty {
                             HStack(alignment: .bottom, spacing: 9) {
                                 aiAvatar
-                                if manager.streamingText.isEmpty {
-                                    typingBubble
-                                } else {
-                                    Text(manager.streamingText)
-                                        .font(.system(size: 13))
-                                        .foregroundStyle(Color(hex: "#eeeef5"))
-                                        .lineSpacing(3)
-                                        .padding(.horizontal, 13)
-                                        .padding(.vertical, 10)
-                                        .background(Color(hex: "#18181f"))
-                                        .clipShape(UnevenRoundedRectangle(
-                                            topLeadingRadius: 4, bottomLeadingRadius: 14,
-                                            bottomTrailingRadius: 14, topTrailingRadius: 14
-                                        ))
+                                VStack(alignment: .leading, spacing: 4) {
+                                    if manager.streamingText.isEmpty {
+                                        typingBubble
+                                    } else {
+                                        markdownView(manager.streamingText)
+                                            .font(.system(size: 13))
+                                            .foregroundStyle(Color(hex: "#eeeef5"))
+                                            .lineSpacing(3)
+                                            .padding(.horizontal, 13)
+                                            .padding(.vertical, 10)
+                                            .background(Color(hex: "#18181f"))
+                                            .clipShape(UnevenRoundedRectangle(
+                                                topLeadingRadius: 4, bottomLeadingRadius: 14,
+                                                bottomTrailingRadius: 14, topTrailingRadius: 14
+                                            ))
+                                    }
+                                    if manager.loadingLongWait {
+                                        Text("ИИ думает…")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(Color(hex: "#6b6b80"))
+                                    }
                                 }
                                 Spacer(minLength: 40)
                             }
@@ -647,6 +654,7 @@ struct GymBroChatScreen: View {
     private func sendMessage() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         let attached = attachedWorkouts
         let attachedTmpls = attachedTemplates
         let images = attachedImagesData
@@ -682,9 +690,17 @@ private struct TypingDotsView: View {
     }
 }
 
-// MARK: - Message Row
+// MARK: - Markdown
 
-/// Рендерит текст с поддержкой **жирного** (markdown-style).
+/// View с рендерингом **жирного** через AttributedString или fallback-парсер.
+private func markdownView(_ s: String) -> some View {
+    if let attr = try? AttributedString(markdown: s) {
+        return AnyView(Text(attr))
+    }
+    return AnyView(markdownText(s))
+}
+
+/// Текст с поддержкой **жирного** (fallback, когда AttributedString не подходит).
 private func markdownText(_ s: String) -> Text {
     let parts = s.split(separator: "**", omittingEmptySubsequences: false).map(String.init)
     guard !parts.isEmpty else { return Text(verbatim: "") }
@@ -695,8 +711,17 @@ private func markdownText(_ s: String) -> Text {
     return result
 }
 
+// MARK: - Message Row
+
 struct MessageRow: View {
     let message: GymBroMessage
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        f.locale = Locale(identifier: "ru_RU")
+        return f
+    }()
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 9) {
@@ -734,26 +759,42 @@ struct MessageRow: View {
     }
 
     private var aiBubble: some View {
-        markdownText(message.text)
-            .font(.system(size: 13))
-            .foregroundStyle(Color(hex: "#eeeef5"))
-            .lineSpacing(3)
-            .padding(.horizontal, 13)
-            .padding(.vertical, 10)
-            .background(Color(hex: "#18181f"))
-            .clipShape(
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 4, bottomLeadingRadius: 14,
-                    bottomTrailingRadius: 14, topTrailingRadius: 14
-                )
+        VStack(alignment: .leading, spacing: 4) {
+            markdownView(message.text)
+                .font(.system(size: 13))
+                .foregroundStyle(Color(hex: "#eeeef5"))
+                .lineSpacing(3)
+            messageTimestamp
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 10)
+        .background(Color(hex: "#18181f"))
+        .clipShape(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 4, bottomLeadingRadius: 14,
+                bottomTrailingRadius: 14, topTrailingRadius: 14
             )
-            .overlay(
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 4, bottomLeadingRadius: 14,
-                    bottomTrailingRadius: 14, topTrailingRadius: 14
-                )
-                .stroke(Color(hex: "#55556a").opacity(0.15), lineWidth: 1)
+        )
+        .overlay(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 4, bottomLeadingRadius: 14,
+                bottomTrailingRadius: 14, topTrailingRadius: 14
             )
+            .stroke(Color(hex: "#55556a").opacity(0.15), lineWidth: 1)
+        )
+        .contextMenu {
+            Button {
+                UIPasteboard.general.string = message.text
+            } label: {
+                Label("Копировать", systemImage: "doc.on.doc")
+            }
+        }
+    }
+
+    private var messageTimestamp: some View {
+        Text(MessageRow.timeFormatter.string(from: message.timestamp))
+            .font(.system(size: 10))
+            .foregroundStyle(Color(hex: "#6b6b80"))
     }
 
     private var userBubble: some View {
@@ -771,10 +812,11 @@ struct MessageRow: View {
                     }
                 }
             }
-            markdownText(message.text)
+            markdownView(message.text)
                 .font(.system(size: 13))
                 .foregroundStyle(Color(hex: "#eeeef5"))
                 .lineSpacing(3)
+            messageTimestamp
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 10)
@@ -792,6 +834,13 @@ struct MessageRow: View {
             )
             .stroke(Color(hex: "#ff4a2a").opacity(0.2), lineWidth: 1)
         )
+        .contextMenu {
+            Button {
+                UIPasteboard.general.string = message.text
+            } label: {
+                Label("Копировать", systemImage: "doc.on.doc")
+            }
+        }
     }
 }
 

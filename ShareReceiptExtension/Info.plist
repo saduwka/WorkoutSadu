@@ -9,12 +9,7 @@
 		<key>NSExtensionAttributes</key>
 		<dict>
 			<key>NSExtensionActivationRule</key>
-			<dict>
-				<key>NSExtensionActivationSupportsFileWithMaxCount</key>
-				<integer>1</integer>
-				<key>NSExtensionActivationUsesStrictMatching</key>
-				<integer>0</integer>
-			</dict>
+			<string>SUBQUERY(extensionItems, $e, SUBQUERY($e.attachments, $a, ANY $a.registeredTypeIdentifiers UTI-CONFORMS-TO "com.adobe.pdf" OR ANY $a.registeredTypeIdentifiers UTI-CONFORMS-TO "public.image" OR ANY $a.registeredTypeIdentifiers UTI-CONFORMS-TO "public.jpeg" OR ANY $a.registeredTypeIdentifiers UTI-CONFORMS-TO "public.png").@count >= 1).@count >= 1</string>
 		</dict>
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.share-services</string>

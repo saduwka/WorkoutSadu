@@ -60,13 +60,13 @@ struct GymBroMessage: Identifiable {
 
     enum Role { case ai, user }
 
-    init(id: UUID = UUID(), role: Role, text: String, template: PendingTemplate? = nil, lifeAction: PendingLifeAction? = nil, isSetComment: Bool = false, attachedImageData: [Data] = []) {
+    init(id: UUID = UUID(), role: Role, text: String, template: PendingTemplate? = nil, lifeAction: PendingLifeAction? = nil, isSetComment: Bool = false, attachedImageData: [Data] = [], timestamp: Date? = nil) {
         self.id = id
         self.role = role
         self.text = text
         self.template = template
         self.lifeAction = lifeAction
-        self.timestamp = Date()
+        self.timestamp = timestamp ?? Date()
         self.isSetComment = isSetComment
         self.attachedImageData = attachedImageData
     }
@@ -160,6 +160,8 @@ final class GymBroManager {
     var screenContextImage: Data? = nil
     /// Текст ответа во время стриминга (печатается в реальном времени).
     var streamingText: String = ""
+    /// true, если загрузка ответа идёт дольше 5 секунд (показать индикатор долгого ожидания).
+    var loadingLongWait: Bool = false
 
     private var insightsReady = false
     private var lastSummary: WorkoutSummary?
@@ -450,7 +452,8 @@ final class GymBroManager {
             GymBroMessage(
                 role: pm.roleRaw == "user" ? .user : .ai,
                 text: pm.text,
-                isSetComment: pm.isSetComment
+                isSetComment: pm.isSetComment,
+                timestamp: pm.timestamp
             )
         }
     }
@@ -497,9 +500,11 @@ final class GymBroManager {
     private func fetchOpeningMessage(summary: WorkoutSummary) async {
         await MainActor.run {
             isLoading = true
+            loadingLongWait = false
             errorMessage = nil
             streamingText = ""
         }
+        startLongWaitTimer()
 
         let session = createChatSession(summary: summary, fromMessages: messages)
         let prompt = """
@@ -524,6 +529,7 @@ final class GymBroManager {
 
             await MainActor.run {
                 isLoading = false
+                loadingLongWait = false
                 streamingText = ""
 
                 let fullText = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -541,6 +547,7 @@ final class GymBroManager {
             print("GymBro opening error: \(error.localizedDescription)")
             await MainActor.run {
                 isLoading = false
+                loadingLongWait = false
                 streamingText = ""
                 errorMessage = error.localizedDescription.contains("429")
                     ? "Слишком много запросов. Подожди минуту."
@@ -552,9 +559,11 @@ final class GymBroManager {
     private func fetchReply(userText: String, summary: WorkoutSummary, attached: [Workout] = [], attachedTemplates: [WorkoutTemplate] = [], attachedImages: [Data] = [], contextImage: Data? = nil) async {
         await MainActor.run {
             isLoading = true
+            loadingLongWait = false
             errorMessage = nil
             streamingText = ""
         }
+        startLongWaitTimer()
 
         var messageText = userText
         if !attached.isEmpty {
@@ -590,6 +599,7 @@ final class GymBroManager {
 
             await MainActor.run {
                 isLoading = false
+                loadingLongWait = false
                 streamingText = ""
 
                 let fullText = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -607,6 +617,7 @@ final class GymBroManager {
             print("GymBro reply error: \(error.localizedDescription)")
             await MainActor.run {
                 isLoading = false
+                loadingLongWait = false
                 streamingText = ""
                 errorMessage = error.localizedDescription.contains("429")
                     ? "Слишком много запросов. Подожди минуту."
@@ -615,7 +626,16 @@ final class GymBroManager {
         }
     }
 
+    private func startLongWaitTimer() {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            if isLoading { loadingLongWait = true }
+        }
+    }
+
     private func fetchReplyMultimodal(summary: WorkoutSummary, messageText: String, attachedImages: [Data], contextImage: Data?) async {
+        await MainActor.run { loadingLongWait = false }
+        startLongWaitTimer()
         let historyMsgs = Array(messages.dropLast())
         let historyBlock = buildHistoryPrompt(from: historyMsgs)
         let promptSuffix = """
@@ -649,6 +669,7 @@ final class GymBroManager {
             let fullText = response.text?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
             await MainActor.run {
                 isLoading = false
+                loadingLongWait = false
                 if !fullText.isEmpty {
                     let (cleanText, template, lifeAction) = parseResponse(fullText)
                     let aiMsg = GymBroMessage(role: .ai, text: cleanText, template: template, lifeAction: lifeAction)
@@ -662,6 +683,7 @@ final class GymBroManager {
             print("GymBro multimodal reply error: \(error.localizedDescription)")
             await MainActor.run {
                 isLoading = false
+                loadingLongWait = false
                 errorMessage = error.localizedDescription.contains("429")
                     ? "Слишком много запросов. Подожди минуту."
                     : "Ошибка ИИ: \(error.localizedDescription)"

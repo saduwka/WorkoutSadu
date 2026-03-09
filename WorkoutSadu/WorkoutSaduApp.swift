@@ -3,11 +3,34 @@ import SwiftData
 import UserNotifications
 import FirebaseCore
 import WidgetKit
+import CoreFoundation
+
+private let receiptSavedDarwinName = "com.saduwka.WorkoutSadu.receiptSaved"
+
+private func receiptSavedDarwinCallback(
+    _ center: CFNotificationCenter?,
+    _ observer: UnsafeMutableRawPointer?,
+    _ name: CFNotificationName?,
+    _ object: UnsafeRawPointer?,
+    _ userInfo: CFDictionary?
+) {
+    DispatchQueue.main.async {
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+}
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         FirebaseApp.configure()
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            nil,
+            receiptSavedDarwinCallback,
+            receiptSavedDarwinName as CFString,
+            nil,
+            .deliverImmediately
+        )
         return true
     }
 }

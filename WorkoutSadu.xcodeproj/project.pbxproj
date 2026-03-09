@@ -627,6 +627,7 @@
 				DEVELOPMENT_TEAM = 8PRZ5T6DB3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = SADU;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Камера используется для сканирования чеков и фото упражнений";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Микрофон используется для голосового ввода транзакций";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Распознавание речи для голосового ввода транзакций";
@@ -663,6 +664,7 @@
 				DEVELOPMENT_TEAM = 8PRZ5T6DB3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = SADU;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Камера используется для сканирования чеков и фото упражнений";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Микрофон используется для голосового ввода транзакций";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Распознавание речи для голосового ввода транзакций";
