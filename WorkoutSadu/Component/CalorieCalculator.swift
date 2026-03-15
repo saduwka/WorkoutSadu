@@ -31,8 +31,8 @@ struct CalorieCalculator {
 
         // Age/height correction via BMR ratio (Mifflin-St Jeor, male approximation)
         let bmrFactor: Double
-        if let p = profile, p.height > 0, p.age > 0 {
-            let bmr = 10.0 * p.weight + 6.25 * p.height - 5.0 * Double(p.age) + 5.0
+        if let p = profile, p.height > 0, p.effectiveAge > 0 {
+            let bmr = 10.0 * p.weight + 6.25 * p.height - 5.0 * Double(p.effectiveAge) + 5.0
             let standardBMR = 10.0 * weight + 6.25 * 175 - 5.0 * 25 + 5.0
             bmrFactor = bmr / standardBMR
         } else {
@@ -52,8 +52,8 @@ struct CalorieCalculator {
 
     /// Estimated daily calorie target (Mifflin-St Jeor TDEE).
     static func dailyTarget(profile: BodyProfile?, activityLevel: Double = 1.55) -> Int? {
-        guard let p = profile, p.weight > 0, p.height > 0, p.age > 0 else { return nil }
-        let bmr = 10.0 * p.weight + 6.25 * p.height - 5.0 * Double(p.age) + 5.0
+        guard let p = profile, p.weight > 0, p.height > 0, p.effectiveAge > 0 else { return nil }
+        let bmr = 10.0 * p.weight + 6.25 * p.height - 5.0 * Double(p.effectiveAge) + 5.0
         return Int(bmr * activityLevel)
     }
 }

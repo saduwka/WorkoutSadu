@@ -323,7 +323,7 @@ struct GamificationManager {
         if let p = profile {
             var parts: [String] = []
             if p.weight > 0 { parts.append("вес \(String(format: "%.0f", p.weight))кг") }
-            if p.age > 0 { parts.append("возраст \(p.age)") }
+            if p.effectiveAge > 0 { parts.append("возраст \(p.effectiveAge)") }
             if !parts.isEmpty { profileStr = parts.joined(separator: ", ") }
         }
 

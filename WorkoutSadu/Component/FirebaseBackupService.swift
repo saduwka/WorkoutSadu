@@ -130,8 +130,11 @@ private struct BackupBodyProfile: Codable {
     let weight: Double
     let height: Double
     let age: Int
+    let birthDate: Date?
     let restingHeartRate: Int
     let bodyFatPercent: Double?
+    let goalRaw: String
+    let targetWeightKg: Double
     let updatedAt: Date
 }
 
@@ -260,7 +263,7 @@ final class FirebaseBackupService {
                 BackupWeeklyGoal(id: g.id.uuidString, title: g.title, targetCount: g.targetCount, currentCount: g.currentCount, weekStart: g.weekStart, periodRaw: g.periodRaw, createdAt: g.createdAt)
             },
             bodyProfiles: profiles.map { p in
-                BackupBodyProfile(weight: p.weight, height: p.height, age: p.age, restingHeartRate: p.restingHeartRate, bodyFatPercent: p.bodyFatPercent, updatedAt: p.updatedAt)
+                BackupBodyProfile(weight: p.weight, height: p.height, age: p.effectiveAge, birthDate: p.birthDate, restingHeartRate: p.restingHeartRate, bodyFatPercent: p.bodyFatPercent, goalRaw: p.goalRaw, targetWeightKg: p.targetWeightKg, updatedAt: p.updatedAt)
             },
             mealEntries: meals.map { m in
                 BackupMealEntry(id: m.id.uuidString, name: m.name, calories: m.calories, protein: m.protein, fat: m.fat, carbs: m.carbs, grams: m.grams, date: m.date, mealTypeRaw: m.mealTypeRaw)

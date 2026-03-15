@@ -101,8 +101,16 @@ struct BodyProfileView: View {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 infoCell("Вес", p.weight > 0 ? String(format: "%.1f кг", p.weight) : "—")
                 infoCell("Рост", p.height > 0 ? String(format: "%.0f см", p.height) : "—")
-                infoCell("Возраст", p.age > 0 ? "\(p.age) лет" : "—")
+                infoCell("Возраст", p.effectiveAge > 0 ? "\(p.effectiveAge) лет" : "—")
                 infoCell("ЧСС покоя", p.restingHeartRate > 0 ? "\(p.restingHeartRate) уд/мин" : "—")
+            }
+            if let goal = p.goal {
+                HStack {
+                    Text("Цель").font(.system(size: 11)).foregroundStyle(Color(hex: "#6b6b80"))
+                    Spacer()
+                    Text(goal.title).font(.system(size: 14, weight: .semibold)).foregroundStyle(Color(hex: "#f0f0f5"))
+                }
+                .padding(.top, 4)
             }
         }
         .padding(18).darkCard()
@@ -123,9 +131,18 @@ struct BodyProfileView: View {
             metricRow("BMI", p.bmi.map { String(format: "%.1f · \(p.bmiCategory)", $0) } ?? "—",
                       color: p.bmi.map { bmiColor($0) })
             Divider().padding(.leading, 16)
-            metricRow("Макс. ЧСС", p.maxHeartRate.map { "\($0) уд/мин" } ?? "—", color: nil)
+            metricRow("Норма по росту", p.idealWeightRange.map { String(format: "%.0f–%.0f кг", $0.lowerBound, $0.upperBound) } ?? "—", color: nil)
+            if let target = p.displayTargetWeight {
+                Divider().padding(.leading, 16)
+                metricRow("Цель по весу", String(format: "%.1f кг", target), color: Color(hex: "#5b8cff"))
+                if let delta = p.weightDeltaFromTarget, abs(delta) >= 0.5 {
+                    Divider().padding(.leading, 16)
+                    metricRow("До цели", delta > 0 ? String(format: "−%.1f кг", delta) : String(format: "+%.1f кг", -delta),
+                              color: delta > 0 ? Color(hex: "#3aff9e") : Color(hex: "#ffb830"))
+                }
+            }
             Divider().padding(.leading, 16)
-            metricRow("Идеальный вес", p.idealWeightRange.map { String(format: "%.0f–%.0f кг", $0.lowerBound, $0.upperBound) } ?? "—", color: nil)
+            metricRow("Макс. ЧСС", p.maxHeartRate.map { "\($0) уд/мин" } ?? "—", color: nil)
         }
         .darkCard()
     }
@@ -270,7 +287,11 @@ struct BodyProfileEditView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var weightText = ""; @State private var heightText = ""
     @State private var ageText = ""; @State private var hrText = ""; @State private var fatText = ""
+    @State private var targetWeightText = ""
     @State private var showFat = false
+    /// true = ввод возраста вручную, false = дата рождения (возраст считается сам)
+    @State private var useBirthDate = false
+    @State private var birthDatePicker = Date()
 
     var body: some View {
         NavigationStack {
@@ -280,7 +301,36 @@ struct BodyProfileEditView: View {
                     Section("Основное") {
                         field("Вес (кг)", text: $weightText, keyboard: .decimalPad)
                         field("Рост (см)", text: $heightText, keyboard: .decimalPad)
-                        field("Возраст", text: $ageText, keyboard: .numberPad)
+                    }
+                    Section("Возраст") {
+                        Picker("Способ", selection: $useBirthDate) {
+                            Text("Возраст (лет)").tag(false)
+                            Text("Дата рождения").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        if useBirthDate {
+                            DatePicker("Дата рождения", selection: $birthDatePicker, displayedComponents: .date)
+                                .environment(\.locale, Locale(identifier: "ru_RU"))
+                        } else {
+                            field("Лет", text: $ageText, keyboard: .numberPad)
+                        }
+                    }
+                    Section("Цель") {
+                        Picker("Цель", selection: Binding(
+                            get: { profile.goalRaw },
+                            set: { profile.goalRaw = $0 }
+                        )) {
+                            Text("Не выбрано").tag("")
+                            ForEach(BodyGoal.allCases, id: \.rawValue) { g in
+                                Text(g.title).tag(g.rawValue)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        field("Целевой вес (кг)", text: $targetWeightText, keyboard: .decimalPad)
+                        if profile.suggestedTargetWeight != nil, targetWeightText.isEmpty {
+                            Text("Оставь пустым — цель подставится по выбранной цели и росту")
+                                .font(.caption).foregroundStyle(Color(hex: "#6b6b80"))
+                        }
                     }
                     Section("Сердечно-сосудистая") {
                         field("ЧСС покоя (уд/мин)", text: $hrText, keyboard: .numberPad)
@@ -303,8 +353,17 @@ struct BodyProfileEditView: View {
             .onAppear {
                 weightText = profile.weight > 0 ? String(format: "%.1f", profile.weight) : ""
                 heightText = profile.height > 0 ? String(format: "%.0f", profile.height) : ""
-                ageText = profile.age > 0 ? "\(profile.age)" : ""
+                if let d = profile.birthDate {
+                    useBirthDate = true
+                    birthDatePicker = d
+                    ageText = ""
+                } else {
+                    useBirthDate = false
+                    ageText = profile.age > 0 ? "\(profile.age)" : ""
+                    birthDatePicker = Calendar.current.date(byAdding: .year, value: -25, to: Date()) ?? Date()
+                }
                 hrText = profile.restingHeartRate > 0 ? "\(profile.restingHeartRate)" : ""
+                targetWeightText = profile.targetWeightKg > 0 ? String(format: "%.1f", profile.targetWeightKg) : ""
                 if let f = profile.bodyFatPercent { fatText = String(format: "%.1f", f); showFat = true }
             }
         }
@@ -323,8 +382,15 @@ struct BodyProfileEditView: View {
         let fix = { (s: String) in s.replacingOccurrences(of: ",", with: ".") }
         if let w = Double(fix(weightText)) { profile.weight = w }
         if let h = Double(fix(heightText)) { profile.height = h }
-        if let a = Int(ageText) { profile.age = a }
+        if useBirthDate {
+            profile.birthDate = birthDatePicker
+            profile.age = 0
+        } else {
+            profile.birthDate = nil
+            if let a = Int(ageText) { profile.age = a }
+        }
         if let hr = Int(hrText) { profile.restingHeartRate = hr }
+        profile.targetWeightKg = Double(fix(targetWeightText)) ?? 0
         profile.bodyFatPercent = showFat ? Double(fix(fatText)) : nil
         profile.updatedAt = Date()
     }

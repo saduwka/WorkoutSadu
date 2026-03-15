@@ -13,6 +13,7 @@ struct MeTabView: View {
                 case 0:  BodyProfileView()
                 case 1:  MeQuestsView()
                 case 2:  MeRecordsView()
+                case 3:  ReportHistoryView()
                 default: BodyProfileView()
                 }
             }
@@ -25,7 +26,8 @@ struct MeTabView: View {
             let tabs = [
                 ("Профиль", "person.fill"),
                 ("Квесты", "trophy.fill"),
-                ("Рекорды", "medal.fill")
+                ("Рекорды", "medal.fill"),
+                ("Отчёты", "doc.text.magnifyingglass")
             ]
 
             ForEach(Array(tabs.enumerated()), id: \.offset) { i, tab in

@@ -2,14 +2,18 @@ import SwiftUI
 import SwiftData
 
 struct TodayView: View {
+    @Binding var selectedTab: Int
     @Environment(\.modelContext) private var context
+    @State private var showDayReport = false
     @Query(sort: \Workout.date, order: .reverse) private var workouts: [Workout]
     @Query(filter: #Predicate<Habit> { !$0.archived }, sort: \Habit.createdAt) private var habits: [Habit]
     @Query(sort: \TodoItem.createdAt, order: .reverse) private var allTodos: [TodoItem]
     @Query(sort: \FinanceTransaction.date, order: .reverse) private var transactions: [FinanceTransaction]
     @Query(sort: \FinanceAccount.createdAt) private var accounts: [FinanceAccount]
     @Query(sort: \WeeklyGoal.createdAt, order: .reverse) private var goals: [WeeklyGoal]
+    @Query(sort: \NotificationEntry.date, order: .reverse) private var notificationEntries: [NotificationEntry]
     @Query private var profiles: [BodyProfile]
+    @State private var showNotifications = false
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -37,7 +41,15 @@ struct TodayView: View {
         workouts.first { $0.finishedAt == nil }
     }
 
-    private var pendingTodos: [TodoItem] { allTodos.filter { !$0.completed } }
+    private var pendingTodos: [TodoItem] {
+        let cal = Calendar.current
+        let today = Date()
+        return allTodos.filter { todo in
+            guard !todo.completed else { return false }
+            guard let due = todo.dueDate else { return true }
+            return cal.isDate(due, inSameDayAs: today)
+        }
+    }
 
     private var todayExpense: Int {
         let cal = Calendar.current
@@ -63,6 +75,12 @@ struct TodayView: View {
 
     private var currentWeekGoals: [WeeklyGoal] { goals.filter { $0.isCurrentWeek } }
 
+    private var hasUnreadNotifications: Bool {
+        let lastViewed = UserDefaults.standard.object(forKey: "NotificationHistory.lastViewed") as? Date ?? .distantPast
+        let newest = notificationEntries.first?.date ?? .distantPast
+        return newest > lastViewed
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -80,8 +98,46 @@ struct TodayView: View {
                     .padding(.bottom, 40)
                 }
             }
-            .navigationTitle("LIFEOS")
+            .navigationTitle("SADU")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        showDayReport = true
+                    } label: {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .foregroundStyle(Color(hex: "#ff5c3a"))
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showNotifications = true
+                    } label: {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "bell.fill")
+                                .font(.system(size: 18))
+                                .foregroundStyle(Color(hex: "#f0f0f5"))
+                            if hasUnreadNotifications {
+                                Circle()
+                                    .fill(Color(hex: "#ff5c3a"))
+                                    .frame(width: 8, height: 8)
+                                    .offset(x: 6, y: -4)
+                            }
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showNotifications) {
+                NotificationHistoryView()
+            }
+            .onChange(of: showNotifications) { _, visible in
+                if !visible {
+                    UserDefaults.standard.set(Date(), forKey: "NotificationHistory.lastViewed")
+                }
+            }
+            .sheet(isPresented: $showDayReport) {
+                DayReportView(date: Date())
+            }
         }
         .preferredColorScheme(.dark)
     }
@@ -177,7 +233,7 @@ struct TodayView: View {
 
                         let streak = habit.streak()
                         if streak > 0 {
-                            Text("\(streak)d")
+                            Text("\(streak) дн")
                                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                                 .foregroundStyle(Color(hex: "#ffb830"))
                         }
@@ -187,6 +243,8 @@ struct TodayView: View {
         }
         .padding(14)
         .darkCard()
+        .contentShape(Rectangle())
+        .onTapGesture { selectedTab = 2 }
     }
 
     // MARK: - Todos
@@ -242,6 +300,8 @@ struct TodayView: View {
         }
         .padding(14)
         .darkCard()
+        .contentShape(Rectangle())
+        .onTapGesture { selectedTab = 2 }
     }
 
     // MARK: - Finance
@@ -276,6 +336,8 @@ struct TodayView: View {
             .padding(.vertical, 14)
             .darkCard()
         }
+        .contentShape(Rectangle())
+        .onTapGesture { selectedTab = 3 }
     }
 
     // MARK: - Goals
@@ -318,6 +380,8 @@ struct TodayView: View {
                 }
                 .padding(14)
                 .darkCard()
+                .contentShape(Rectangle())
+                .onTapGesture { selectedTab = 4 }
             }
         }
     }

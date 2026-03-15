@@ -297,6 +297,29 @@ struct GymBroChatScreen: View {
             ZStack(alignment: .bottomTrailing) {
                 ScrollView {
                     VStack(spacing: 12) {
+                        ForEach(manager.messages) { msg in
+                            VStack(spacing: 8) {
+                                MessageRow(message: msg)
+                                if let template = msg.template {
+                                    TemplateCard(
+                                        template: template,
+                                        messageId: msg.id,
+                                        manager: manager
+                                    )
+                                    .padding(.horizontal, 14)
+                                }
+                                if let action = msg.lifeAction {
+                                    LifeActionCard(
+                                        action: action,
+                                        messageId: msg.id,
+                                        manager: manager
+                                    )
+                                    .padding(.horizontal, 14)
+                                }
+                            }
+                            .id(msg.id.uuidString)
+                        }
+
                         if manager.isLoading || !manager.streamingText.isEmpty {
                             HStack(alignment: .bottom, spacing: 9) {
                                 aiAvatar
@@ -326,29 +349,6 @@ struct GymBroChatScreen: View {
                             }
                             .padding(.horizontal, 14)
                             .id("typing")
-                        }
-
-                        ForEach(manager.messages) { msg in
-                            VStack(spacing: 8) {
-                                MessageRow(message: msg)
-                                if let template = msg.template {
-                                    TemplateCard(
-                                        template: template,
-                                        messageId: msg.id,
-                                        manager: manager
-                                    )
-                                    .padding(.horizontal, 14)
-                                }
-                                if let action = msg.lifeAction {
-                                    LifeActionCard(
-                                        action: action,
-                                        messageId: msg.id,
-                                        manager: manager
-                                    )
-                                    .padding(.horizontal, 14)
-                                }
-                            }
-                            .id(msg.id.uuidString)
                         }
 
                         if let err = manager.errorMessage {
@@ -392,13 +392,20 @@ struct GymBroChatScreen: View {
                     }
                 }
                 .onChange(of: manager.messages.count) { _, _ in
-                    // Небольшая задержка — дать контенту отрендерить новую ячейку; один scrollTo("bottom"), без "typing"
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    // Задержка ~0.15 — дать LazyVStack отрендерить новую ячейку, иначе скролл «прыгает»
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                         proxy.scrollTo("bottom", anchor: .bottom)
                     }
                 }
-                .onChange(of: manager.isLoading) { _, _ in
-                    // isLoading меняется вместе с messages.count — скролл уже в onChange(messages.count)
+                .onChange(of: manager.isLoading) { _, loading in
+                    if loading {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            proxy.scrollTo("bottom", anchor: .bottom)
+                        }
+                    }
+                }
+                .onChange(of: manager.streamingText) { _, _ in
+                    proxy.scrollTo("bottom", anchor: .bottom)
                 }
                 // Не скроллить при фокусе на поле ввода: клавиатура меняет layout, scrollTo даёт сбой и сообщения «пропадают»
 
@@ -692,21 +699,34 @@ private struct TypingDotsView: View {
 
 // MARK: - Markdown
 
-/// View с рендерингом **жирного** через AttributedString или fallback-парсер.
+/// View с рендерингом markdown (**жирный**, *курсив*) через AttributedString или fallback.
+/// inlineOnlyPreservingWhitespace уменьшает падения на заголовках (#) и некорректном markdown от Gemini.
 private func markdownView(_ s: String) -> some View {
-    if let attr = try? AttributedString(markdown: s) {
+    if let attr = try? AttributedString(markdown: s, options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
         return AnyView(Text(attr))
     }
     return AnyView(markdownText(s))
 }
 
-/// Текст с поддержкой **жирного** (fallback, когда AttributedString не подходит).
+/// Fallback: **жирный** и *курсив* (когда AttributedString не подходит).
 private func markdownText(_ s: String) -> Text {
     let parts = s.split(separator: "**", omittingEmptySubsequences: false).map(String.init)
     guard !parts.isEmpty else { return Text(verbatim: "") }
+    var result = Text(verbatim: "")
+    for (i, part) in parts.enumerated() {
+        let segment = i % 2 == 1 ? Text(verbatim: part).bold() : inlineFormatted(part)
+        result = Text("\(result)\(segment)")
+    }
+    return result
+}
+
+private func inlineFormatted(_ s: String) -> Text {
+    let parts = s.split(separator: "*", omittingEmptySubsequences: false).map(String.init)
+    guard parts.count > 1 else { return Text(verbatim: s) }
     var result = Text(verbatim: parts[0])
     for i in 1..<parts.count {
-        result = i % 2 == 1 ? result + Text(verbatim: parts[i]).bold() : result + Text(verbatim: parts[i])
+        let next = i % 2 == 1 ? Text(verbatim: parts[i]).italic() : Text(verbatim: parts[i])
+        result = Text("\(result)\(next)")
     }
     return result
 }

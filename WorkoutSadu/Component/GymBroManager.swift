@@ -38,7 +38,7 @@ final class PersistedMessage {
 
     init(role: GymBroMessage.Role, text: String, isSetComment: Bool = false) {
         self.id = UUID()
-        self.roleRaw = role == .user ? "user" : "ai"
+        self.roleRaw = role.rawValue
         self.text = text
         self.timestamp = Date()
         self.isSetComment = isSetComment
@@ -58,7 +58,7 @@ struct GymBroMessage: Identifiable {
     /// Фото, приложенные к сообщению (в истории не сохраняем — только для отображения в текущей сессии).
     var attachedImageData: [Data]
 
-    enum Role { case ai, user }
+    enum Role: String { case ai, user }
 
     init(id: UUID = UUID(), role: Role, text: String, template: PendingTemplate? = nil, lifeAction: PendingLifeAction? = nil, isSetComment: Bool = false, attachedImageData: [Data] = [], timestamp: Date? = nil) {
         self.id = id
@@ -369,6 +369,10 @@ final class GymBroManager {
             trigger: trigger
         )
         UNUserNotificationCenter.current().add(request)
+        if let ctx = modelContext {
+            ctx.insert(NotificationEntry(title: content.title, body: content.body, typeRaw: "gymBroComment"))
+            try? ctx.save()
+        }
     }
 
     // MARK: - Chat session
@@ -657,14 +661,26 @@ final class GymBroManager {
         do {
             let model = getChatModel(summary: summary)
             let response: GenerateContentResponse
-            if images.isEmpty {
-                response = try await model.generateContent(promptSuffix)
-            } else if images.count == 1 {
-                response = try await model.generateContent([promptSuffix, images[0]])
-            } else if images.count == 2 {
-                response = try await model.generateContent([promptSuffix, images[0], images[1]])
-            } else {
-                response = try await model.generateContent([promptSuffix, images[0], images[1], images[2]])
+            switch images.count {
+            case 0: response = try await model.generateContent(promptSuffix)
+            case 1: response = try await model.generateContent([promptSuffix, images[0]])
+            case 2: response = try await model.generateContent([promptSuffix, images[0], images[1]])
+            case 3: response = try await model.generateContent([promptSuffix, images[0], images[1], images[2]])
+            case 4: response = try await model.generateContent([promptSuffix, images[0], images[1], images[2], images[3]])
+            case 5: response = try await model.generateContent([promptSuffix, images[0], images[1], images[2], images[3], images[4]])
+            case 6: response = try await model.generateContent([promptSuffix, images[0], images[1], images[2], images[3], images[4], images[5]])
+            case 7: response = try await model.generateContent([promptSuffix, images[0], images[1], images[2], images[3], images[4], images[5], images[6]])
+            case 8: response = try await model.generateContent([promptSuffix, images[0], images[1], images[2], images[3], images[4], images[5], images[6], images[7]])
+            case 9: response = try await model.generateContent([promptSuffix, images[0], images[1], images[2], images[3], images[4], images[5], images[6], images[7], images[8]])
+            case 10: response = try await model.generateContent([promptSuffix, images[0], images[1], images[2], images[3], images[4], images[5], images[6], images[7], images[8], images[9]])
+            case 11: response = try await model.generateContent([promptSuffix, images[0], images[1], images[2], images[3], images[4], images[5], images[6], images[7], images[8], images[9], images[10]])
+            case 12: response = try await model.generateContent([promptSuffix, images[0], images[1], images[2], images[3], images[4], images[5], images[6], images[7], images[8], images[9], images[10], images[11]])
+            case 13: response = try await model.generateContent([promptSuffix, images[0], images[1], images[2], images[3], images[4], images[5], images[6], images[7], images[8], images[9], images[10], images[11], images[12]])
+            case 14: response = try await model.generateContent([promptSuffix, images[0], images[1], images[2], images[3], images[4], images[5], images[6], images[7], images[8], images[9], images[10], images[11], images[12], images[13]])
+            case 15: response = try await model.generateContent([promptSuffix, images[0], images[1], images[2], images[3], images[4], images[5], images[6], images[7], images[8], images[9], images[10], images[11], images[12], images[13], images[14]])
+            default:
+                let imgs = Array(images.prefix(16))
+                response = try await model.generateContent([promptSuffix, imgs[0], imgs[1], imgs[2], imgs[3], imgs[4], imgs[5], imgs[6], imgs[7], imgs[8], imgs[9], imgs[10], imgs[11], imgs[12], imgs[13], imgs[14], imgs[15]])
             }
             let fullText = response.text?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
             await MainActor.run {
@@ -884,11 +900,12 @@ final class GymBroManager {
 
     private func profileBlock(_ summary: WorkoutSummary) -> String {
         var profileStr = "не указан"
-        if summary.weight > 0 || summary.height > 0 || summary.age > 0 {
+        if summary.weight > 0 || summary.height > 0 || summary.age > 0 || !summary.goalTitle.isEmpty {
             var parts: [String] = []
             if summary.weight > 0 { parts.append("вес \(String(format: "%.1f", summary.weight)) кг") }
             if summary.height > 0 { parts.append("рост \(String(format: "%.0f", summary.height)) см") }
             if summary.age > 0 { parts.append("возраст \(summary.age) лет") }
+            if !summary.goalTitle.isEmpty { parts.append("цель: \(summary.goalTitle)") }
             profileStr = parts.joined(separator: ", ")
         }
         return profileStr
@@ -923,6 +940,7 @@ final class GymBroManager {
 
         Правила:
         - Допустимые bodyPart: Грудь, Спина, Ноги, Плечи, Руки, Пресс, Кардио.
+        - Для Кардио используй название тренажёра/активности, от него зависит форма ввода: «Степпер», «Беговая дорожка», «Велотренажёр», «Гребной тренажёр», «Эллиптический» и т.п. — или уточни у пользователя. sets/reps/weight для кардио не обязательны.
         - Подбирай веса и повторения исходя из профиля и истории тренировок.
         - Если данных мало — ставь средние значения.
         - Перед JSON объясни коротко что за программа/какие изменения и почему.
@@ -991,13 +1009,15 @@ final class GymBroManager {
             contextBlock = ""
         }
         return """
-        Ты Life Bro — дружелюбный лайф-коуч в iOS-приложении LifeOS.
+        Ты Life Bro — дружелюбный лайф-коуч в iOS-приложении SADU.
         Ты знаешь про тренировки, финансы, привычки, задачи, цели и питание (еду/калории) пользователя.
         \(contextBlock)\
         Говори как знающий друг: прямо, конкретно, с юмором. Давай советы на стыке данных, в том числе по еде и калориям.
         Например: если пользователь много тратит и мало тренируется — подмечай это.
         Если серия привычек рвётся — мотивируй. Отвечай на том же языке что и пользователь.
         У тебя есть долгосрочная память — ты помнишь все прошлые разговоры с пользователем.
+
+        ПИТАНИЕ — ОБЯЗАТЕЛЬНО: Исходя из профиля (рост, вес, возраст, цель по телу) и данных по еде за день — давай персональные советы по питанию. Рекомендуй калории (дефицит при похудении, профицит при наборе мышц/веса, поддержка при «удержать»), норму белка (~1.6–2.2 г/кг для набора мышц, ~1.2–1.6 при похудении), режим приёмов пищи и что есть/ограничить. Если пользователь спрашивает «как питаться», «что есть», «сколько калорий», «что перекусить» — отвечай на основе его цели и дневной нормы. Можешь сам предлагать: «с учётом цели похудеть лучше не добирать до нормы на 200–300 ккал» или «для набора мышц добавь белок в обед».
 
         ПРОФИЛЬ: \(profileBlock(summary))
 
@@ -1016,7 +1036,7 @@ final class GymBroManager {
         ФИНАНСЫ:
         \(financeBlock(summary))
 
-        ЕДА / ПИТАНИЕ:
+        ЕДА / ПИТАНИЕ (используй для советов по питанию; рекомендации давай исходя из цели и нормы):
         \(mealsBlock(summary))
 
         ШАБЛОНЫ:
@@ -1048,6 +1068,9 @@ final class GymBroManager {
 
     private func mealsBlock(_ summary: WorkoutSummary) -> String {
         var lines: [String] = []
+        if !summary.goalTitle.isEmpty {
+            lines.append("Цель по телу: \(summary.goalTitle). Подсказывай как питаться исходя из этой цели.")
+        }
         lines.append("Сегодня съедено: \(summary.caloriesEatenToday) ккал. Сожжено (тренировки): \(summary.caloriesBurnedToday) ккал.")
         if let target = summary.dailyCalorieTarget {
             let balance = summary.caloriesEatenToday - summary.caloriesBurnedToday
@@ -1140,7 +1163,8 @@ final class GymBroManager {
         if let profile {
             summary.weight = profile.weight
             summary.height = profile.height
-            summary.age = profile.age
+            summary.age = profile.effectiveAge
+            summary.goalTitle = profile.goal?.title ?? ""
         }
         summary.templates = templates.map { t in
             (id: t.id, name: t.name, exercises: t.exercises.sorted { $0.order < $1.order }.map { $0.exerciseName })
@@ -1288,6 +1312,8 @@ private struct WorkoutSummary {
     var weight: Double = 0
     var height: Double = 0
     var age: Int = 0
+    /// Цель по телу: Похудеть, Набрать мышечную массу, Удержать, Набрать вес (для советов по питанию).
+    var goalTitle: String = ""
     var templates: [(id: UUID, name: String, exercises: [String])] = []
     var knownExercises: [(name: String, bodyPart: String)] = []
 

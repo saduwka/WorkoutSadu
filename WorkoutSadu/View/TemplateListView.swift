@@ -64,7 +64,7 @@ struct TemplateListView: View {
                     for url in urls {
                         guard url.startAccessingSecurityScopedResource() else { continue }
                         defer { url.stopAccessingSecurityScopedResource() }
-                        try? TemplateImporter.importJSON(from: url, into: context)
+                        _ = try? TemplateImporter.importJSON(from: url, into: context)
                     }
                 }
             }

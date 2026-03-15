@@ -190,7 +190,7 @@ struct WorkoutListView: View {
                     for url in urls {
                         guard url.startAccessingSecurityScopedResource() else { continue }
                         defer { url.stopAccessingSecurityScopedResource() }
-                        try? WorkoutImporter.importJSON(from: url, into: context)
+                        _ = try? WorkoutImporter.importJSON(from: url, into: context)
                     }
                 }
             }

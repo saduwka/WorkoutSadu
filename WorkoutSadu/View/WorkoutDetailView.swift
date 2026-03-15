@@ -119,6 +119,10 @@ struct WorkoutDetailView: View {
         .preferredColorScheme(.dark)
     }
 
+    private func cardioSummaryLines(_ we: WorkoutExercise) -> [String] {
+        CardioPresetsLoader.summaryLines(exerciseName: we.exercise.name, values: we.allCardioValues())
+    }
+
     private func exerciseRow(_ we: WorkoutExercise) -> some View {
         HStack(spacing: 12) {
             if we.supersetGroup != nil {
@@ -142,8 +146,9 @@ struct WorkoutDetailView: View {
             Spacer()
             if we.exercise.bodyPart == BodyPart.cardio.rawValue {
                 HStack(spacing: 6) {
-                    if let d = we.distance { Text(String(format: "%.1f км", d)) }
-                    if let t = we.cardioTimeSeconds { Text("\(t/60) мин") }
+                    ForEach(cardioSummaryLines(we), id: \.self) { line in
+                        Text(line)
+                    }
                 }
                 .font(.system(size: 12))
                 .foregroundStyle(Color(hex: "#6b6b80"))

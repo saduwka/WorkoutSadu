@@ -245,6 +245,7 @@ struct FinanceStatsView: View {
         let f = NumberFormatter()
         f.numberStyle = .decimal
         f.groupingSeparator = " "
-        return f.string(from: NSNumber(value: value)) ?? "\(value)"
+        let absStr = f.string(from: NSNumber(value: abs(value))) ?? "\(abs(value))"
+        return value < 0 ? "−\(absStr)" : absStr
     }
 }

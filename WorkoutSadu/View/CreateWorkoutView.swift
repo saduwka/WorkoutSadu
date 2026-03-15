@@ -220,8 +220,9 @@ struct CreateWorkoutView: View {
             Spacer()
             if we.exercise.bodyPart == BodyPart.cardio.rawValue {
                 HStack(spacing: 6) {
-                    if let d = we.distance { Text(String(format: "%.1f км", d)) }
-                    if let t = we.cardioTimeSeconds { Text("\(t/60) мин") }
+                    ForEach(CardioPresetsLoader.summaryLines(exerciseName: we.exercise.name, values: we.allCardioValues()), id: \.self) { line in
+                        Text(line)
+                    }
                 }
                 .font(.caption).foregroundStyle(Color(hex: "#6b6b80"))
             } else {

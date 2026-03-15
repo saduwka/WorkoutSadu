@@ -25,6 +25,12 @@ struct WorkoutExerciseExport: Codable {
     let sets: [WorkoutSetExport]
     let distance: Double?
     let cardioTimeSeconds: Int?
+    let cardioStepsPerMin: Double?
+    let cardioSteps: Int?
+    let cardioPowerWatts: Double?
+    let cardioHeartRateBpm: Int?
+    /// Гибкие кардио-метрики из JSON-конфига (ключ id метрики → значение).
+    let cardioValues: [String: Double]?
     let note: String?
     let supersetGroup: Int?
 
@@ -36,6 +42,11 @@ struct WorkoutExerciseExport: Codable {
             .map { WorkoutSetExport(from: $0) }
         self.distance = we.distance
         self.cardioTimeSeconds = we.cardioTimeSeconds
+        self.cardioStepsPerMin = we.cardioStepsPerMin
+        self.cardioSteps = we.cardioSteps
+        self.cardioPowerWatts = we.cardioPowerWatts
+        self.cardioHeartRateBpm = we.cardioHeartRateBpm
+        self.cardioValues = we.allCardioValues().isEmpty ? nil : we.allCardioValues()
         self.note = we.note
         self.supersetGroup = we.supersetGroup
     }
@@ -177,6 +188,13 @@ struct WorkoutImporter {
             let we = WorkoutExercise(exercise: exercise)
             we.distance = ex.distance
             we.cardioTimeSeconds = ex.cardioTimeSeconds
+            we.cardioStepsPerMin = ex.cardioStepsPerMin
+            we.cardioSteps = ex.cardioSteps
+            we.cardioPowerWatts = ex.cardioPowerWatts
+            we.cardioHeartRateBpm = ex.cardioHeartRateBpm
+            if let cv = ex.cardioValues {
+                for (key, value) in cv { we.setCardioValue(for: key, value) }
+            }
             we.note = ex.note
             we.supersetGroup = ex.supersetGroup
             we.order = index

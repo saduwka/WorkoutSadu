@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct TasksTabView: View {
     @Environment(\.modelContext) private var context
@@ -20,6 +21,9 @@ struct TasksTabView: View {
         }
         .background(Color(hex: "#0e0e12"))
         .onAppear { renewWeeklyGoalsIfNeeded() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            renewWeeklyGoalsIfNeeded()
+        }
     }
 
     /// Сброс currentCount и weekStart у целей при смене периода (при открытии вкладки).
@@ -71,9 +75,6 @@ struct HabitsView: View {
     @Query(filter: #Predicate<Habit> { !$0.archived }, sort: \Habit.createdAt) private var habits: [Habit]
 
     @State private var showAddHabit = false
-    @State private var newHabitName = ""
-    @State private var selectedColor = "#ff5c3a"
-    @State private var selectedIcon = "checkmark.circle"
     @State private var habitToDelete: Habit?
     @State private var editingHabit: Habit?
 
@@ -113,16 +114,13 @@ struct HabitsView: View {
                     }
                 }
             }
-            .alert("Новая привычка", isPresented: $showAddHabit) {
-                TextField("Название", text: $newHabitName)
-                Button("Создать") {
-                    guard !newHabitName.isEmpty else { return }
-                    let h = Habit(name: newHabitName, icon: selectedIcon, colorHex: selectedColor)
+            .sheet(isPresented: $showAddHabit) {
+                AddHabitSheet(colors: colors, icons: icons) { name, colorHex, icon in
+                    let h = Habit(name: name, icon: icon, colorHex: colorHex)
                     context.insert(h)
                     try? context.save()
-                    newHabitName = ""
+                    showAddHabit = false
                 }
-                Button("Отмена", role: .cancel) { newHabitName = "" }
             }
             .alert("Удалить привычку?", isPresented: Binding(
                 get: { habitToDelete != nil },
@@ -159,26 +157,37 @@ struct HabitsView: View {
             let weeks = 12
             let cal = Calendar.current
             let today = cal.startOfDay(for: Date())
-            // Локаль: первый день недели (воскресенье=1, понедельник=2 и т.д.)
-            let todayWeekday = (cal.component(.weekday, from: today) - cal.firstWeekday + 7) % 7
+            // Фиксируем понедельник = 0 (ISO), чтобы сетка не смещалась из‑за локали (firstWeekday)
+            let todayWeekday = (cal.component(.weekday, from: today) + 5) % 7
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 3) {
-                    ForEach(0..<weeks, id: \.self) { weekOffset in
-                        VStack(spacing: 3) {
-                            ForEach(0..<7, id: \.self) { row in
-                                let daysBack = (weeks - 1 - weekOffset) * 7 + (todayWeekday - row)
-                                let isValid = weekOffset < weeks - 1 || row <= todayWeekday
-                                if isValid, let day = cal.date(byAdding: .day, value: -daysBack, to: today) {
-                                    let count = habits.filter { $0.isCompleted(on: day) }.count
-                                    let intensity = habits.isEmpty ? 0 : Double(count) / Double(max(habits.count, 1))
-                                    RoundedRectangle(cornerRadius: 2)
-                                        .fill(intensity > 0 ? Color(hex: "#3aff9e").opacity(0.2 + intensity * 0.8) : Color(hex: "#1a1a24"))
-                                        .frame(width: 14, height: 14)
-                                } else {
-                                    RoundedRectangle(cornerRadius: 2)
-                                        .fill(Color(hex: "#1a1a24"))
-                                        .frame(width: 14, height: 14)
+                HStack(alignment: .top, spacing: 6) {
+                    // Подписи дней: Пн = row 0, Вс = row 6 (фиксированный порядок)
+                    VStack(spacing: 3) {
+                        ForEach(["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"], id: \.self) { label in
+                            Text(label)
+                                .font(.system(size: 8, weight: .medium))
+                                .foregroundStyle(Color(hex: "#6b6b80"))
+                                .frame(width: 14, height: 14)
+                        }
+                    }
+                    HStack(spacing: 3) {
+                        ForEach(0..<weeks, id: \.self) { weekOffset in
+                            VStack(spacing: 3) {
+                                ForEach(0..<7, id: \.self) { row in
+                                    let daysBack = (weeks - 1 - weekOffset) * 7 + (todayWeekday - row)
+                                    let isValid = weekOffset < weeks - 1 || row <= todayWeekday
+                                    if isValid, let day = cal.date(byAdding: .day, value: -daysBack, to: today) {
+                                        let count = habits.filter { $0.isCompleted(on: day) }.count
+                                        let intensity = habits.isEmpty ? 0 : Double(count) / Double(max(habits.count, 1))
+                                        RoundedRectangle(cornerRadius: 2)
+                                            .fill(intensity > 0 ? Color(hex: "#3aff9e").opacity(0.2 + intensity * 0.8) : Color(hex: "#1a1a24"))
+                                            .frame(width: 14, height: 14)
+                                    } else {
+                                        RoundedRectangle(cornerRadius: 2)
+                                            .fill(Color(hex: "#1a1a24"))
+                                            .frame(width: 14, height: 14)
+                                    }
                                 }
                             }
                         }
@@ -1023,6 +1032,103 @@ struct AddGoalSheet: View {
             }
         }
         .presentationDetents([.medium])
+        .preferredColorScheme(.dark)
+    }
+}
+
+// MARK: - Add Habit Sheet
+
+struct AddHabitSheet: View {
+    let colors: [String]
+    let icons: [String]
+    var onSave: (String, String, String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String = ""
+    @State private var selectedColor: String = "#ff5c3a"
+    @State private var selectedIcon: String = "checkmark.circle"
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color(hex: "#0e0e12").ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 20) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("НАЗВАНИЕ")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color(hex: "#6b6b80"))
+                                .tracking(1)
+                            TextField("Привычка", text: $name)
+                                .font(.system(size: 16))
+                                .foregroundStyle(Color(hex: "#f0f0f5"))
+                                .padding(12)
+                                .background(Color(hex: "#1a1a24"))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("ИКОНКА")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color(hex: "#6b6b80"))
+                                .tracking(1)
+                            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 10) {
+                                ForEach(icons, id: \.self) { icon in
+                                    Button {
+                                        selectedIcon = icon
+                                    } label: {
+                                        Image(systemName: icon)
+                                            .font(.system(size: 18))
+                                            .foregroundStyle(selectedIcon == icon ? Color(hex: selectedColor) : Color(hex: "#6b6b80"))
+                                            .frame(width: 44, height: 44)
+                                            .background(selectedIcon == icon ? Color(hex: selectedColor).opacity(0.15) : Color(hex: "#1a1a24"))
+                                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("ЦВЕТ")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color(hex: "#6b6b80"))
+                                .tracking(1)
+                            HStack(spacing: 10) {
+                                ForEach(colors, id: \.self) { color in
+                                    Button {
+                                        selectedColor = color
+                                    } label: {
+                                        Circle()
+                                            .fill(Color(hex: color))
+                                            .frame(width: 36, height: 36)
+                                            .overlay(Circle().stroke(Color.white.opacity(selectedColor == color ? 0.8 : 0), lineWidth: 2))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationTitle("Новая привычка")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") { dismiss() }.foregroundStyle(Color(hex: "#6b6b80"))
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Создать") {
+                        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !n.isEmpty else { return }
+                        onSave(n, selectedColor, selectedIcon)
+                        dismiss()
+                    }
+                    .foregroundStyle(Color(hex: "#ff5c3a")).fontWeight(.semibold)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
         .preferredColorScheme(.dark)
     }
 }

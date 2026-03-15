@@ -34,7 +34,7 @@ final class NutritionAIService {
             var parts: [String] = []
             if p.weight > 0 { parts.append("вес \(String(format: "%.0f", p.weight)) кг") }
             if p.height > 0 { parts.append("рост \(String(format: "%.0f", p.height)) см") }
-            if p.age > 0 { parts.append("возраст \(p.age) лет") }
+            if p.effectiveAge > 0 { parts.append("возраст \(p.effectiveAge) лет") }
             if !parts.isEmpty {
                 profileContext = "\nПрофиль пользователя: \(parts.joined(separator: ", ")). Учитывай это при оценке стандартных порций."
             }
@@ -76,7 +76,7 @@ final class NutritionAIService {
             var parts: [String] = []
             if p.weight > 0 { parts.append("вес \(String(format: "%.0f", p.weight)) кг") }
             if p.height > 0 { parts.append("рост \(String(format: "%.0f", p.height)) см") }
-            if p.age > 0 { parts.append("возраст \(p.age) лет") }
+            if p.effectiveAge > 0 { parts.append("возраст \(p.effectiveAge) лет") }
             if !parts.isEmpty {
                 profileContext = "\nПрофиль пользователя: \(parts.joined(separator: ", ")). Учитывай при оценке порций."
             }

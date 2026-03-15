@@ -484,6 +484,7 @@ struct StatsView: View {
               let first = cal.date(from: cal.dateComponents([.year, .month], from: d)) else { return [] }
         return range.compactMap { cal.date(byAdding: .day, value: $0 - 1, to: first) }
     }
+    /// Смещение первого дня месяца: weekday 1=Вс…7=Сб (не зависит от локали); (x+5)%7 даёт Пн=0 для календарной сетки.
     private func firstWeekdayOffset(_ d: Date) -> Int {
         let cal = Calendar.current
         guard let first = cal.date(from: cal.dateComponents([.year, .month], from: d)) else { return 0 }

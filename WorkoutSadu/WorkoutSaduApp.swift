@@ -23,6 +23,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         FirebaseApp.configure()
+        ReportManager.shared.scheduleAllReportNotifications()
         CFNotificationCenterAddObserver(
             CFNotificationCenterGetDarwinNotifyCenter(),
             nil,
@@ -42,18 +43,55 @@ extension Notification.Name {
 class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationDelegate()
     static var pendingGymBroOpen = false
+    /// По тапу на отчёт: открыть полноценный отчёт (день/неделя/месяц).
+    static var pendingReportType: String?
+    static var pendingReportDate: Date?
+    /// Контекст для сохранения уведомлений в историю (ставится из WidgetSyncModifier).
+    var modelContext: ModelContext?
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        saveNotificationToHistory(content: notification.request.content)
         completionHandler([.banner, .sound])
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
         let userInfo = response.notification.request.content.userInfo
-        if userInfo["type"] as? String == "gymBroComment" {
+        let type = userInfo["type"] as? String
+        if type == "gymBroComment" {
             Self.pendingGymBroOpen = true
             NotificationCenter.default.post(name: .openGymBroChat, object: nil)
+        } else if type == "dayReport" || type == "weekReport" || type == "monthReport" {
+            let cal = Calendar.current
+            let now = Date()
+            switch type {
+            case "dayReport":
+                Self.pendingReportDate = cal.date(byAdding: .day, value: -1, to: now) ?? now
+            case "weekReport":
+                let lastWeek = cal.date(byAdding: .weekOfYear, value: -1, to: now) ?? now
+                Self.pendingReportDate = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: lastWeek)) ?? lastWeek
+            case "monthReport":
+                Self.pendingReportDate = cal.date(from: cal.dateComponents([.year, .month], from: cal.date(byAdding: .month, value: -1, to: now)!)) ?? now
+            default:
+                break
+            }
+            Self.pendingReportType = type
         }
+        saveNotificationToHistory(content: response.notification.request.content)
         completionHandler()
+    }
+
+    private func saveNotificationToHistory(content: UNNotificationContent) {
+        guard let ctx = modelContext else { return }
+        let type = (content.userInfo["type"] as? String) ?? ""
+        DispatchQueue.main.async {
+            ctx.insert(NotificationEntry(
+                title: content.title,
+                body: content.body,
+                date: Date(),
+                typeRaw: type.isEmpty ? "unknown" : type
+            ))
+            try? ctx.save()
+        }
     }
 }
 
@@ -62,18 +100,49 @@ struct WidgetSyncModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .onAppear {
+                NotificationDelegate.shared.modelContext = context
+            }
             .task {
                 WidgetDataManager.sync(context: context)
                 WidgetCenter.shared.reloadAllTimelines()
                 await FirebaseBackupService.shared.tryExportIfNeeded(context: context)
+                NutritionReminderService.checkAndSchedule(context: context)
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                 WidgetDataManager.sync(context: context)
                 WidgetCenter.shared.reloadAllTimelines()
+                NutritionReminderService.checkAndSchedule(context: context)
                 Task { @MainActor in
                     await FirebaseBackupService.shared.tryExportIfNeeded(context: context)
                 }
             }
+    }
+}
+
+/// Контейнер для открытия отчёта по тапу на уведомление (день/неделя/месяц).
+struct ReportFromNotificationContainerView: View {
+    let reportType: String
+    let reportDate: Date
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Group {
+            switch reportType {
+            case "dayReport":
+                DayReportView(date: reportDate, autoRequestComment: true)
+            case "weekReport":
+                WeekReportView(dateInWeek: reportDate, autoRequestComment: true)
+            case "monthReport":
+                MonthReportView(dateInMonth: reportDate, autoRequestComment: true)
+            default:
+                EmptyView()
+            }
+        }
+        .onDisappear {
+            NotificationDelegate.pendingReportType = nil
+            NotificationDelegate.pendingReportDate = nil
+        }
     }
 }
 
@@ -82,6 +151,9 @@ struct WorkoutApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @State private var selectedTab = 0
     @State private var gymBroManager = GymBroManager()
+    @State private var showReportFromNotification = false
+    @State private var reportFromNotificationType: String?
+    @State private var reportFromNotificationDate: Date?
 
     init() {
         UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
@@ -113,7 +185,7 @@ struct WorkoutApp: App {
         WindowGroup {
             ZStack(alignment: .bottomTrailing) {
                 TabView(selection: $selectedTab) {
-                    TodayView()
+                    TodayView(selectedTab: $selectedTab)
                         .tabItem { Label("Сегодня", systemImage: "sun.max.fill") }
                         .tag(0)
 
@@ -139,6 +211,27 @@ struct WorkoutApp: App {
             }
             .environment(gymBroManager)
             .modifier(WidgetSyncModifier())
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                if let t = NotificationDelegate.pendingReportType, let d = NotificationDelegate.pendingReportDate {
+                    reportFromNotificationType = t
+                    reportFromNotificationDate = d
+                    selectedTab = 4
+                    showReportFromNotification = true
+                } else if PendingReceiptStorage.hasPendingReceiptFile() {
+                    selectedTab = 3
+                }
+            }
+            .fullScreenCover(isPresented: $showReportFromNotification) {
+                if let t = reportFromNotificationType, let d = reportFromNotificationDate {
+                    ReportFromNotificationContainerView(reportType: t, reportDate: d)
+                }
+            }
+            .onChange(of: showReportFromNotification) { _, showing in
+                if !showing {
+                    reportFromNotificationType = nil
+                    reportFromNotificationDate = nil
+                }
+            }
         }
         .modelContainer(for: [
             Workout.self, WorkoutExercise.self, Exercise.self,
@@ -146,7 +239,9 @@ struct WorkoutApp: App {
             TemplateExercise.self, WeightEntry.self, GymBroChat.self,
             PersistedMessage.self, GeneratedQuest.self, MealEntry.self,
             FinanceTransaction.self, FinanceAccount.self,
-            Habit.self, HabitEntry.self, TodoItem.self, WeeklyGoal.self
+            Habit.self, HabitEntry.self, TodoItem.self, WeeklyGoal.self,
+            MoodEntry.self, SavedReport.self,
+            WaterEntry.self, NotificationEntry.self
         ])
     }
 }

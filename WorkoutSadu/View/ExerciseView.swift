@@ -22,7 +22,7 @@ struct ExerciseView: View {
     private var historyPoints: [(date: Date, weight: Double)] {
         let exerciseName = workoutExercise.exercise.name
         let bodyPart = workoutExercise.exercise.bodyPart
-        var descriptor = FetchDescriptor<WorkoutExercise>()
+        let descriptor = FetchDescriptor<WorkoutExercise>()
         guard let all = try? context.fetch(descriptor) else { return [] }
         var points: [(Date, Double)] = []
         for we in all {
@@ -174,23 +174,9 @@ struct ExerciseView: View {
                         .darkCard()
                     }
 
-                    // Cardio
+                    // Cardio — метрики из JSON-конфига (CardioPresets по имени упражнения)
                     if isCardio {
-                        VStack(spacing: 0) {
-                            label("КАРДИО")
-                            cardioRow(title: "Расстояние",
-                                value: Binding(
-                                    get: { workoutExercise.distance ?? 0 },
-                                    set: { workoutExercise.distance = $0 }),
-                                step: 0.5, unit: "км", range: 0...100)
-                            Divider().padding(.leading, 16)
-                            cardioRow(title: "Время",
-                                value: Binding(
-                                    get: { Double((workoutExercise.cardioTimeSeconds ?? 0) / 60) },
-                                    set: { workoutExercise.cardioTimeSeconds = Int($0) * 60 }),
-                                step: 1, unit: "мин", range: 0...600)
-                        }
-                        .darkCard()
+                        cardioCard
                     } else {
                         // Sets
                         VStack(spacing: 0) {
@@ -344,12 +330,44 @@ struct ExerciseView: View {
             .padding(.bottom, 6)
     }
 
+    private var cardioCard: some View {
+        let config = CardioPresetsLoader.config(forExerciseName: workoutExercise.exercise.name)
+        return VStack(spacing: 0) {
+            label("КАРДИО")
+            ForEach(Array(config.metrics.enumerated()), id: \.element.id) { index, metric in
+                if index > 0 { Divider().padding(.leading, 16) }
+                cardioRow(
+                    title: metric.label,
+                    value: cardioBinding(for: metric),
+                    step: metric.step,
+                    unit: metric.unit,
+                    range: (metric.min ?? 0)...metric.max
+                )
+            }
+        }
+        .darkCard()
+    }
+
+    private func cardioBinding(for metric: CardioMetricConfig) -> Binding<Double> {
+        let isTimeSeconds = metric.valueType == "timeSeconds"
+        return Binding(
+            get: {
+                let raw = workoutExercise.getCardioValue(for: metric.id) ?? 0
+                return isTimeSeconds ? raw / 60 : raw
+            },
+            set: { newValue in
+                let value = isTimeSeconds ? newValue * 60 : newValue
+                workoutExercise.setCardioValue(for: metric.id, value)
+            }
+        )
+    }
+
     private func cardioRow(title: String, value: Binding<Double>, step: Double, unit: String, range: ClosedRange<Double>) -> some View {
         HStack {
             Text(title).font(.system(size: 15)).foregroundStyle(Color(hex: "#f0f0f5"))
             Spacer()
             Stepper(value: value, in: range, step: step) {
-                Text("\(value.wrappedValue, specifier: step < 1 ? "%.1f" : "%.0f") \(unit)")
+                Text(unit.isEmpty ? "\(value.wrappedValue, specifier: step < 1 ? "%.1f" : "%.0f")" : "\(value.wrappedValue, specifier: step < 1 ? "%.1f" : "%.0f") \(unit)")
                     .font(.system(size: 14)).foregroundStyle(Color(hex: "#6b6b80"))
             }
         }
@@ -371,14 +389,10 @@ struct ExerciseView: View {
             w.startedAt = set.completedAt
             try? context.save()
         }
-        let isPR: Bool
         if let pr = PRManager.check(set: set, exercise: workoutExercise.exercise, in: context) {
             prResult = pr
-            isPR = true
             withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) { showPRCelebration = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { withAnimation { showPRCelebration = false } }
-        } else {
-            isPR = false
         }
 
         if let s = workoutExercise.timerSeconds, s > 0 { timerManager.start(seconds: s, exerciseID: workoutExercise.id.uuidString) }

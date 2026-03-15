@@ -14,11 +14,7 @@ final class SpeechRecognizer {
     private let audioEngine = AVAudioEngine()
 
     func requestPermissions() async -> Bool {
-        let micGranted = await withCheckedContinuation { cont in
-            AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                cont.resume(returning: granted)
-            }
-        }
+        let micGranted = await AVAudioApplication.requestRecordPermission()
         guard micGranted else { return false }
 
         let speechStatus = await withCheckedContinuation { cont in

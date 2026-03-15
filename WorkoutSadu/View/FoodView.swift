@@ -2,21 +2,38 @@ import SwiftUI
 import SwiftData
 import Charts
 
+/// Обёртка для показа листа редактирования еды по тапу.
+private struct EditMealItem: Identifiable {
+    let id: UUID
+    let meal: MealEntry
+}
+
 // MARK: - Food View (калории и приёмы пищи)
 
 struct FoodView: View {
     @Environment(\.modelContext) private var context
     @Environment(GymBroManager.self) private var gymBro
     @Query(sort: \MealEntry.date) private var allMeals: [MealEntry]
+    @Query(sort: \WaterEntry.date) private var allWater: [WaterEntry]
     @Query(sort: \Workout.date) private var workouts: [Workout]
     @Query private var profiles: [BodyProfile]
 
+    private static let dailyWaterTargetML = 2000
+
     @State private var showAddMeal = false
+    @State private var editingMeal: EditMealItem?
     @State private var caloriesDate: Date = Date()
 
     private var mealsForSelectedDay: [MealEntry] {
         let cal = Calendar.current
         return allMeals.filter { cal.isDate($0.date, inSameDayAs: caloriesDate) }
+    }
+
+    private var waterForSelectedDay: Int {
+        let cal = Calendar.current
+        return allWater
+            .filter { cal.isDate($0.date, inSameDayAs: caloriesDate) }
+            .reduce(0) { $0 + $1.amountML }
     }
 
     private var eatenToday: Int { mealsForSelectedDay.reduce(0) { $0 + $1.calories } }
@@ -35,6 +52,7 @@ struct FoodView: View {
                 ScrollView {
                     VStack(spacing: 14) {
                         caloriesDatePicker
+                        waterCard
                         caloriesBalanceCard
                         caloriesMacrosCard
                         caloriesMealListCard
@@ -53,7 +71,10 @@ struct FoodView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showAddMeal) { AddMealView() }
+            .sheet(isPresented: $showAddMeal) { AddMealView(initialDate: caloriesDate) }
+            .sheet(item: $editingMeal) { item in
+                EditMealSheet(meal: item.meal)
+            }
         }
         .onAppear { gymBro.screenContext = "Еда / калории" }
         .onDisappear { gymBro.screenContext = nil }
@@ -94,6 +115,68 @@ struct FoodView: View {
         if Calendar.current.isDateInYesterday(caloriesDate) { return "Вчера" }
         let f = DateFormatter(); f.dateFormat = "d MMMM"; f.locale = Locale(identifier: "ru_RU")
         return f.string(from: caloriesDate)
+    }
+
+    // MARK: - Water card
+
+    private var waterCard: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "drop.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color(hex: "#5b8cff"))
+                Text("ВОДА")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color(hex: "#6b6b80"))
+                    .tracking(1)
+                Spacer()
+                Text("\(waterForSelectedDay) / \(Self.dailyWaterTargetML) мл")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color(hex: "#f0f0f5"))
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(hex: "#1a1a24"))
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(hex: "#5b8cff"))
+                        .frame(width: min(geo.size.width, (Double(waterForSelectedDay) / Double(Self.dailyWaterTargetML)) * geo.size.width))
+                }
+            }
+            .frame(height: 8)
+            HStack(spacing: 10) {
+                Button {
+                    addWater(250)
+                } label: {
+                    Label("+250 мл", systemImage: "plus.circle.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color(hex: "#5b8cff"))
+                }
+                .buttonStyle(.plain)
+                Button {
+                    addWater(500)
+                } label: {
+                    Label("+500 мл", systemImage: "plus.circle.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color(hex: "#5b8cff"))
+                }
+                .buttonStyle(.plain)
+            }
+            if !Calendar.current.isDate(caloriesDate, inSameDayAs: Date()) {
+                Text("Добавляется за \(caloriesDate, format: .dateTime.day().month(.abbreviated))")
+                    .font(.caption)
+                    .foregroundStyle(Color(hex: "#6b6b80"))
+            }
+        }
+        .padding(16)
+        .darkCard()
+        .padding(.horizontal, 16)
+    }
+
+    private func addWater(_ ml: Int) {
+        let entry = WaterEntry(date: caloriesDate, amountML: ml)
+        context.insert(entry)
+        try? context.save()
     }
 
     // MARK: - Balance card
@@ -245,7 +328,7 @@ struct FoodView: View {
                         .padding(.top, 10)
                         .padding(.bottom, 4)
 
-                        ForEach(meals, id: \.id) { meal in
+                        ForEach(meals.sorted { $0.date < $1.date }, id: \.id) { meal in
                             mealRow(meal)
                                 .overlay(Divider().padding(.leading, 16), alignment: .bottom)
                         }
@@ -271,24 +354,37 @@ struct FoodView: View {
 
     private func mealRow(_ meal: MealEntry) -> some View {
         HStack {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(meal.name)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color(hex: "#f0f0f5"))
-                    .lineLimit(1)
-                HStack(spacing: 8) {
-                    Text("Б \(String(format: "%.0f", meal.protein))")
-                    Text("Ж \(String(format: "%.0f", meal.fat))")
-                    Text("У \(String(format: "%.0f", meal.carbs))")
+            Button {
+                editingMeal = EditMealItem(id: meal.id, meal: meal)
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(meal.name)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(Color(hex: "#f0f0f5"))
+                            .lineLimit(1)
+                        HStack(spacing: 8) {
+                            Text("Б \(String(format: "%.0f", meal.protein))")
+                            Text("Ж \(String(format: "%.0f", meal.fat))")
+                            Text("У \(String(format: "%.0f", meal.carbs))")
+                        }
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(hex: "#6b6b80"))
+                        Text(mealTimeString(meal.date))
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color(hex: "#6b6b80"))
+                    }
+                    Spacer()
+                    Text("\(meal.calories) ккал")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#ff5c3a"))
                 }
-                .font(.system(size: 11))
-                .foregroundStyle(Color(hex: "#6b6b80"))
             }
-            Spacer()
-            Text("\(meal.calories) ккал")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color(hex: "#ff5c3a"))
-            Button { context.delete(meal); try? context.save() } label: {
+            .buttonStyle(.plain)
+            Button {
+                context.delete(meal)
+                try? context.save()
+            } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: 16))
                     .foregroundStyle(Color(hex: "#6b6b80").opacity(0.5))
@@ -297,6 +393,13 @@ struct FoodView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+    }
+
+    private func mealTimeString(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ru_RU")
+        f.dateFormat = "HH:mm"
+        return f.string(from: date)
     }
 
     // MARK: - Weekly chart

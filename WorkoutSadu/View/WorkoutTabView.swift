@@ -41,7 +41,7 @@ struct HealthTabView: View {
     private var sectionPicker: some View {
         HStack(spacing: 0) {
             let tabs = [
-                ("Тренировки", "dumbbell.fill"),
+                ("Трен.", "dumbbell.fill"),
                 ("Шаблоны", "doc.on.doc"),
                 ("Прогресс", "chart.line.uptrend.xyaxis"),
                 ("Еда", "fork.knife")

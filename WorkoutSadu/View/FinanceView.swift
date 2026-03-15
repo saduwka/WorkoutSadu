@@ -146,7 +146,39 @@ struct FinanceOverviewView: View {
     }
 
     private func checkPendingReceipt() {
-        // Подтвердили в Share Extension — показываем лист с выбором счёта, не сохраняем без счёта
+        // Файл чека из Share Extension — распознаём в приложении и показываем лист
+        if PendingReceiptStorage.hasPendingReceiptFile(), let (fileURL, isPDF) = PendingReceiptStorage.loadPendingReceiptFileURL() {
+            Task { @MainActor in
+                do {
+                    let entries: [ParsedFinanceEntry]
+                    if isPDF {
+                        entries = try await ReceiptScannerService.shared.processPDF(url: fileURL)
+                    } else if let image = UIImage(contentsOfFile: fileURL.path) {
+                        entries = try await ReceiptScannerService.shared.process(image: image)
+                    } else {
+                        PendingReceiptStorage.clearPendingReceiptFile()
+                        return
+                    }
+                    PendingReceiptStorage.clearPendingReceiptFile()
+                    let list = entries.map { e in
+                        PendingReceiptTransaction(
+                            name: e.name,
+                            amount: e.amount,
+                            category: e.category,
+                            type: e.type,
+                            date: e.date ?? Date()
+                        )
+                    }
+                    if !list.isEmpty {
+                        pendingReceiptItem = PendingReceiptSheetItem(transactions: list)
+                    }
+                } catch {
+                    PendingReceiptStorage.clearPendingReceiptFile()
+                }
+            }
+            return
+        }
+        // Подтвердили в Share Extension — показываем лист с выбором счёта
         if PendingReceiptStorage.wasConfirmedInExtension(), let list = PendingReceiptStorage.load(), !list.isEmpty {
             PendingReceiptStorage.clearConfirmedInExtensionFlag()
             pendingReceiptItem = PendingReceiptSheetItem(transactions: list)

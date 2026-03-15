@@ -3,6 +3,9 @@ import SwiftData
 import UIKit
 
 struct AddMealView: View {
+    /// Если передан (например из FoodView при выборе дня), при открытии подставляется дата приёма пищи.
+    var initialDate: Date?
+
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query private var profiles: [BodyProfile]
@@ -10,6 +13,7 @@ struct AddMealView: View {
     @State private var foodText = ""
     @State private var parsedFoods: [ParsedFood] = []
     @State private var selectedMealType: MealType = .lunch
+    @State private var mealDate: Date = Date()
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var didParse = false
@@ -27,6 +31,7 @@ struct AddMealView: View {
                         if let err = errorMessage { errorCard(err) }
                         if didParse && !parsedFoods.isEmpty {
                             mealTypePicker
+                            mealTimePicker
                             resultsCard
                             totalCard
                             saveButton
@@ -51,6 +56,9 @@ struct AddMealView: View {
                     showImagePicker = false
                     Task { await parseFood(from: data) }
                 }
+            }
+            .onAppear {
+                if let d = initialDate { mealDate = d }
             }
             .preferredColorScheme(.dark)
         }
@@ -163,6 +171,20 @@ struct AddMealView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 14)
+        }
+        .darkCard()
+    }
+
+    // MARK: - Meal time
+
+    private var mealTimePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionLabel("ВРЕМЯ ПРИЁМА ПИЩИ")
+            DatePicker("", selection: $mealDate, displayedComponents: [.date, .hourAndMinute])
+                .datePickerStyle(.compact)
+                .tint(Color(hex: "#ff5c3a"))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 14)
         }
         .darkCard()
     }
@@ -317,6 +339,7 @@ struct AddMealView: View {
                 fat: food.fat,
                 carbs: food.carbs,
                 grams: food.grams,
+                date: mealDate,
                 mealType: selectedMealType
             )
             context.insert(entry)
