@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		6121EE8A2F67155E00058511 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 6121EE3B2F67155E00058511 /* README.md */; };
 		614C5A422F4DD5E900AE3FF7 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 614C5A232F4DD5C000AE3FF7 /* WidgetKit.framework */; };
 		614C5A432F4DD5E900AE3FF7 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 614C5A252F4DD5C000AE3FF7 /* SwiftUI.framework */; };
 		614C5A502F4DD5EB00AE3FF7 /* WorkoutSaduWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 614C5A412F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -68,6 +69,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		6121EE3B2F67155E00058511 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		6142BEDA2F323E070079F840 /* WorkoutSadu.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WorkoutSadu.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6142BEEC2F323E090079F840 /* WorkoutSaduTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WorkoutSaduTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6142BEF62F323E0A0079F840 /* WorkoutSaduUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WorkoutSaduUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -181,6 +183,7 @@
 		6142BED12F323E070079F840 = {
 			isa = PBXGroup;
 			children = (
+				6121EE3B2F67155E00058511 /* README.md */,
 				614C5A592F4DD60700AE3FF7 /* WorkoutSaduWidgetExtension.entitlements */,
 				6142BEDC2F323E070079F840 /* WorkoutSadu */,
 				6142BEEF2F323E090079F840 /* WorkoutSaduTests */,
@@ -400,6 +403,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6121EE8A2F67155E00058511 /* README.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
