@@ -5,7 +5,7 @@ import FirebaseStorage
 
 // MARK: - Backup payload (Codable DTOs)
 
-private struct BackupPayload: Codable {
+struct BackupPayload: Codable {
     let version: Int
     let exportedAt: String
     let exercises: [BackupExercise]
@@ -21,14 +21,14 @@ private struct BackupPayload: Codable {
     let mealEntries: [BackupMealEntry]
 }
 
-private struct BackupExercise: Codable {
+struct BackupExercise: Codable {
     let id: String
     let name: String
     let bodyPart: String
     let gifURL: String?
 }
 
-private struct BackupWorkoutSet: Codable {
+struct BackupWorkoutSet: Codable {
     let id: String
     let order: Int
     let reps: Int
@@ -37,7 +37,7 @@ private struct BackupWorkoutSet: Codable {
     let completedAt: Date?
 }
 
-private struct BackupWorkoutExercise: Codable {
+struct BackupWorkoutExercise: Codable {
     let id: String
     let order: Int
     let exerciseId: String
@@ -45,7 +45,7 @@ private struct BackupWorkoutExercise: Codable {
     let sets: [BackupWorkoutSet]
 }
 
-private struct BackupWorkout: Codable {
+struct BackupWorkout: Codable {
     let id: String
     let name: String
     let date: Date
@@ -54,7 +54,7 @@ private struct BackupWorkout: Codable {
     let exercises: [BackupWorkoutExercise]
 }
 
-private struct BackupTemplateExercise: Codable {
+struct BackupTemplateExercise: Codable {
     let id: String
     let order: Int
     let exerciseName: String
@@ -65,14 +65,14 @@ private struct BackupTemplateExercise: Codable {
     let timerSeconds: Int?
 }
 
-private struct BackupTemplate: Codable {
+struct BackupTemplate: Codable {
     let id: String
     let name: String
     let createdAt: Date
     let exercises: [BackupTemplateExercise]
 }
 
-private struct BackupFinanceAccount: Codable {
+struct BackupFinanceAccount: Codable {
     let id: String
     let name: String
     let balance: Int
@@ -81,7 +81,7 @@ private struct BackupFinanceAccount: Codable {
     let createdAt: Date
 }
 
-private struct BackupFinanceTransaction: Codable {
+struct BackupFinanceTransaction: Codable {
     let id: String
     let name: String
     let amount: Int
@@ -91,7 +91,7 @@ private struct BackupFinanceTransaction: Codable {
     let accountID: String?
 }
 
-private struct BackupHabit: Codable {
+struct BackupHabit: Codable {
     let id: String
     let name: String
     let icon: String
@@ -100,13 +100,13 @@ private struct BackupHabit: Codable {
     let archived: Bool
 }
 
-private struct BackupHabitEntry: Codable {
+struct BackupHabitEntry: Codable {
     let id: String
     let date: Date
     let habitId: String
 }
 
-private struct BackupTodo: Codable {
+struct BackupTodo: Codable {
     let id: String
     let title: String
     let completed: Bool
@@ -116,7 +116,7 @@ private struct BackupTodo: Codable {
     let habitId: String?
 }
 
-private struct BackupWeeklyGoal: Codable {
+struct BackupWeeklyGoal: Codable {
     let id: String
     let title: String
     let targetCount: Int
@@ -126,7 +126,7 @@ private struct BackupWeeklyGoal: Codable {
     let createdAt: Date
 }
 
-private struct BackupBodyProfile: Codable {
+struct BackupBodyProfile: Codable {
     let weight: Double
     let height: Double
     let age: Int
@@ -138,7 +138,7 @@ private struct BackupBodyProfile: Codable {
     let updatedAt: Date
 }
 
-private struct BackupMealEntry: Codable {
+struct BackupMealEntry: Codable {
     let id: String
     let name: String
     let calories: Int
@@ -176,6 +176,176 @@ final class FirebaseBackupService {
         } catch {
             print("[FirebaseBackup] Export failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Принудительный экспорт.
+    @MainActor
+    func forceExport(context: ModelContext) async throws {
+        try await signInAnonymouslyIfNeeded()
+        let data = try buildBackupPayload(context: context)
+        try await upload(data: data)
+        saveLastExportDate()
+    }
+
+    /// Восстановление из Firebase. ВНИМАНИЕ: Очищает текущие данные!
+    @MainActor
+    func restoreFromBackup(context: ModelContext) async throws {
+        try await signInAnonymouslyIfNeeded()
+        let data = try await download()
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let payload = try decoder.decode(BackupPayload.self, from: data)
+
+        // 1. Clear current data
+        let models: [any PersistentModel.Type] = [
+            Exercise.self, Workout.self, WorkoutExercise.self, WorkoutSet.self,
+            WorkoutTemplate.self, FinanceAccount.self, FinanceTransaction.self,
+            Habit.self, HabitEntry.self, TodoItem.self, WeeklyGoal.self,
+            BodyProfile.self, MealEntry.self, WeightEntry.self
+        ]
+        for model in models {
+            try context.delete(model: model)
+        }
+        try context.save()
+
+        // 2. Restore Exercises
+        var exerciseMap: [String: Exercise] = [:]
+        for be in payload.exercises {
+            let ex = Exercise(name: be.name, bodyPart: be.bodyPart, gifURL: be.gifURL)
+            if let uid = UUID(uuidString: be.id) { ex.id = uid }
+            context.insert(ex)
+            exerciseMap[be.id] = ex
+        }
+
+        // 3. Restore Workouts
+        for bw in payload.workouts {
+            let w = Workout(name: bw.name, date: bw.date)
+            if let uid = UUID(uuidString: bw.id) { w.id = uid }
+            w.startedAt = bw.startedAt
+            w.finishedAt = bw.finishedAt
+            context.insert(w)
+            
+            for bwe in bw.exercises {
+                guard let ex = exerciseMap[bwe.exerciseId] else { continue }
+                let we = WorkoutExercise(exercise: ex, timerSeconds: bwe.timerSeconds, order: bwe.order)
+                if let uid = UUID(uuidString: bwe.id) { we.id = uid }
+                we.workout = w
+                context.insert(we)
+                
+                for bs in bwe.sets {
+                    let s = WorkoutSet(order: bs.order, reps: bs.reps, weight: bs.weight)
+                    if let uid = UUID(uuidString: bs.id) { s.id = uid }
+                    s.isCompleted = bs.isCompleted
+                    s.completedAt = bs.completedAt
+                    we.workoutSets.append(s)
+                    context.insert(s)
+                }
+            }
+        }
+
+        // 4. Restore Templates
+        for bt in payload.templates {
+            let t = WorkoutTemplate(name: bt.name)
+            if let uid = UUID(uuidString: bt.id) { t.id = uid }
+            t.createdAt = bt.createdAt
+            context.insert(t)
+            
+            for bte in bt.exercises {
+                let te = TemplateExercise(
+                    order: bte.order,
+                    exerciseName: bte.exerciseName,
+                    bodyPart: bte.bodyPart,
+                    timerSeconds: bte.timerSeconds,
+                    defaultSets: bte.defaultSets,
+                    defaultReps: bte.defaultReps,
+                    defaultWeight: bte.defaultWeight
+                )
+                if let uid = UUID(uuidString: bte.id) { te.id = uid }
+                t.exercises.append(te)
+                context.insert(te)
+            }
+        }
+
+        // 5. Restore Finance
+        var accountMap: [String: FinanceAccount] = [:]
+        for ba in payload.financeAccounts {
+            let a = FinanceAccount(name: ba.name, balance: ba.balance, icon: ba.icon, colorHex: ba.colorHex)
+            if let uid = UUID(uuidString: ba.id) { a.id = uid }
+            a.createdAt = ba.createdAt
+            context.insert(a)
+            accountMap[ba.id] = a
+        }
+        for bt in payload.financeTransactions {
+            let category = FinanceCategory(rawValue: bt.categoryRaw) ?? .other
+            let type = FinanceType(rawValue: bt.typeRaw) ?? .expense
+            let t = FinanceTransaction(name: bt.name, amount: bt.amount, category: category, type: type, date: bt.date, accountID: bt.accountID != nil ? UUID(uuidString: bt.accountID!) : nil)
+            if let uid = UUID(uuidString: bt.id) { t.id = uid }
+            context.insert(t)
+        }
+
+        // 6. Restore Habits
+        var habitMap: [String: Habit] = [:]
+        for bh in payload.habits {
+            let h = Habit(name: bh.name, icon: bh.icon, colorHex: bh.colorHex)
+            if let uid = UUID(uuidString: bh.id) { h.id = uid }
+            h.createdAt = bh.createdAt
+            h.archived = bh.archived
+            context.insert(h)
+            habitMap[bh.id] = h
+        }
+        for bhe in payload.habitEntries {
+            guard let h = habitMap[bhe.habitId] else { continue }
+            let e = HabitEntry(date: bhe.date, habit: h)
+            if let uid = UUID(uuidString: bhe.id) { e.id = uid }
+            context.insert(e)
+        }
+
+        // 7. Restore Todos
+        for bt in payload.todos {
+            let habit = bt.habitId != nil ? habitMap[bt.habitId!] : nil
+            let t = TodoItem(title: bt.title, dueDate: bt.dueDate, priority: bt.priority)
+            if let uid = UUID(uuidString: bt.id) { t.id = uid }
+            t.completed = bt.completed
+            t.createdAt = bt.createdAt
+            t.habit = habit
+            context.insert(t)
+        }
+
+        // 8. Restore Goals
+        for bg in payload.weeklyGoals {
+            let period = GoalPeriod(rawValue: bg.periodRaw) ?? .week
+            let g = WeeklyGoal(title: bg.title, targetCount: bg.targetCount, period: period)
+            if let uid = UUID(uuidString: bg.id) { g.id = uid }
+            g.currentCount = bg.currentCount
+            g.weekStart = bg.weekStart
+            g.createdAt = bg.createdAt
+            context.insert(g)
+        }
+
+        // 9. Restore Profiles
+        for bp in payload.bodyProfiles {
+            let p = BodyProfile()
+            p.weight = bp.weight
+            p.height = bp.height
+            p.age = bp.age
+            p.birthDate = bp.birthDate
+            p.restingHeartRate = bp.restingHeartRate
+            p.bodyFatPercent = bp.bodyFatPercent
+            p.goalRaw = bp.goalRaw
+            p.targetWeightKg = bp.targetWeightKg
+            p.updatedAt = bp.updatedAt
+            context.insert(p)
+        }
+
+        // 10. Restore Meals
+        for bm in payload.mealEntries {
+            let mealType = MealType(rawValue: bm.mealTypeRaw) ?? .snack
+            let m = MealEntry(name: bm.name, calories: bm.calories, protein: bm.protein, fat: bm.fat, carbs: bm.carbs, grams: bm.grams, date: bm.date, mealType: mealType)
+            if let uid = UUID(uuidString: bm.id) { m.id = uid }
+            context.insert(m)
+        }
+
+        try context.save()
     }
 
     private func shouldExport() -> Bool {
@@ -278,6 +448,12 @@ final class FirebaseBackupService {
     private func upload(data: Data) async throws {
         guard let uid = Auth.auth().currentUser?.uid else { throw NSError(domain: "FirebaseBackup", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not signed in"]) }
         let ref = Storage.storage().reference().child(storagePath).child(uid).child("latest.json")
-        _ = try await ref.putDataAsync(data)
+        _ = try await ref.putData(data, metadata: nil)
+    }
+
+    private func download() async throws -> Data {
+        guard let uid = Auth.auth().currentUser?.uid else { throw NSError(domain: "FirebaseBackup", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not signed in"]) }
+        let ref = Storage.storage().reference().child(storagePath).child(uid).child("latest.json")
+        return try await ref.data(maxSize: 10 * 1024 * 1024) // 10MB limit
     }
 }

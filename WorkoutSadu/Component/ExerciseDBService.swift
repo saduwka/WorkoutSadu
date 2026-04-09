@@ -1,6 +1,6 @@
 import Foundation
 
-struct ExerciseDBItem: Identifiable, Decodable {
+struct ExerciseDBItem: Identifiable, Decodable, Equatable {
     let id: String
     let name: String
     let bodyPart: String

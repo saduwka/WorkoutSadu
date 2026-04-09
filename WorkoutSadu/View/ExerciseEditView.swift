@@ -69,8 +69,12 @@ struct ExerciseEditView: View {
                         }
                     }
                 }
-                .dismissKeyboardOnTap()
                 .scrollContentBackground(.hidden)
+                .scrollDismissesKeyboard(.interactively)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
             .navigationTitle("Настройки")
             .navigationBarTitleDisplayMode(.inline)
@@ -85,6 +89,7 @@ struct ExerciseEditView: View {
                         workoutExercise.exercise.bodyPart = selectedBodyPart.rawValue
                         let total = timerMinutes * 60 + timerSeconds
                         workoutExercise.timerSeconds = total > 0 ? total : nil
+                        try? workoutExercise.modelContext?.save()
                         dismiss()
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

@@ -16,9 +16,11 @@ struct BodyProfileView: View {
     @State private var confirmAction: DataCleanAction?
     @State private var newWeightText = ""
     @State private var showAddWeight = false
+    @State private var isRestoring = false
+    @State private var restoreError: String?
 
     enum DataCleanAction: Identifiable {
-        case workouts, exercises, templates, everything
+        case workouts, exercises, templates, everything, restore
         var id: Int { hashValue }
     }
 
@@ -211,10 +213,26 @@ struct BodyProfileView: View {
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(Color(hex: "#6b6b80")).tracking(1)
                 Spacer()
-                Text("тр: \(workouts.count) · упр: \(exercises.count) · сетов: \(workoutSets.count)")
-                    .font(.system(size: 10)).foregroundStyle(Color(hex: "#6b6b80"))
+                if isRestoring {
+                    ProgressView().tint(Color(hex: "#ff5c3a")).scaleEffect(0.7)
+                } else {
+                    Text("тр: \(workouts.count) · упр: \(exercises.count) · сетов: \(workoutSets.count)")
+                        .font(.system(size: 10)).foregroundStyle(Color(hex: "#6b6b80"))
+                }
             }
             .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)
+
+            Button {
+                confirmAction = .restore
+            } label: {
+                HStack {
+                    Image(systemName: "cloud.arrow.down").foregroundStyle(Color(hex: "#5b8cff"))
+                    Text("Восстановить из облака").font(.system(size: 14, weight: .medium)).foregroundStyle(Color(hex: "#5b8cff"))
+                    Spacer()
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
+            }
+            Divider().padding(.leading, 16)
 
             deleteRow("Удалить все тренировки", count: workouts.count) { confirmAction = .workouts }
             Divider().padding(.leading, 16)
@@ -232,6 +250,11 @@ struct BodyProfileView: View {
             }
         }
         .darkCard()
+        .alert("Ошибка восстановления", isPresented: Binding(get: { restoreError != nil }, set: { if !$0 { restoreError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            if let err = restoreError { Text(err) }
+        }
     }
 
     private func deleteRow(_ label: String, count: Int, action: @escaping () -> Void) -> some View {
@@ -251,6 +274,7 @@ struct BodyProfileView: View {
         case .exercises: return "Удалить все упражнения?"
         case .templates: return "Удалить все шаблоны?"
         case .everything: return "Сбросить всё?"
+        case .restore: return "Восстановить из облака?"
         case nil: return ""
         }
     }
@@ -260,6 +284,7 @@ struct BodyProfileView: View {
         case .exercises: return "Будет удалено \(exercises.count) упражнений."
         case .templates: return "Будет удалено \(templates.count) шаблонов."
         case .everything: return "Все тренировки, упражнения и шаблоны будут удалены. Профиль сохранится."
+        case .restore: return "Текущие данные будут полностью заменены данными из Firebase. Это нельзя отменить."
         case nil: return ""
         }
     }
@@ -269,6 +294,16 @@ struct BodyProfileView: View {
         case .exercises: exercises.forEach { context.delete($0) }
         case .templates: templates.forEach { context.delete($0) }
         case .everything: workouts.forEach { context.delete($0) }; workoutExercises.forEach { context.delete($0) }; workoutSets.forEach { context.delete($0) }; exercises.forEach { context.delete($0) }; templates.forEach { context.delete($0) }
+        case .restore:
+            Task {
+                isRestoring = true
+                do {
+                    try await FirebaseBackupService.shared.restoreFromBackup(context: context)
+                } catch {
+                    restoreError = error.localizedDescription
+                }
+                isRestoring = false
+            }
         }
         try? context.save()
     }

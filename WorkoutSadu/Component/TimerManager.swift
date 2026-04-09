@@ -3,6 +3,7 @@ import Combine
 import UserNotifications
 import AVFoundation
 import UIKit
+import ActivityKit
 
 class TimerManager: ObservableObject {
     static let shared = TimerManager()
@@ -10,12 +11,15 @@ class TimerManager: ObservableObject {
     @Published var remainingTime: Int = 0
     @Published var isRunning: Bool = false
     @Published private(set) var exerciseID: String?
+    @Published private(set) var exerciseName: String?
 
     private var timer: Timer?
     private var endDate: Date?
     private var player: AVAudioPlayer?
     private let notificationID = "rest-timer-done"
     private var cancellables = Set<AnyCancellable>()
+    
+    private var currentActivity: Activity<TimerAttributes>?
 
     private init() {
         NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
@@ -27,17 +31,22 @@ class TimerManager: ObservableObject {
             .store(in: &cancellables)
     }
 
-    func start(seconds: Int, exerciseID: String? = nil) {
+    func start(seconds: Int, exerciseID: String? = nil, exerciseName: String? = nil) {
         stop()
         guard seconds > 0 else { return }
 
         self.exerciseID = exerciseID
-        endDate = Date().addingTimeInterval(TimeInterval(seconds))
+        self.exerciseName = exerciseName
+        let end = Date().addingTimeInterval(TimeInterval(seconds))
+        endDate = end
         remainingTime = seconds
         isRunning = true
 
         scheduleNotification(after: seconds)
         startDisplayTimer()
+        
+        // Start Live Activity
+        startLiveActivity(endTime: end, exerciseName: exerciseName)
     }
 
     func stop() {
@@ -47,7 +56,11 @@ class TimerManager: ObservableObject {
         isRunning = false
         endDate = nil
         exerciseID = nil
+        exerciseName = nil
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notificationID])
+        
+        // End Live Activity
+        endLiveActivity()
     }
 
     func timeString() -> String {
@@ -87,6 +100,7 @@ class TimerManager: ObservableObject {
                 self.endDate = nil
                 t.invalidate()
                 self.fireLocally()
+                self.endLiveActivity()
             }
         }
     }
@@ -114,12 +128,42 @@ class TimerManager: ObservableObject {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
 
         if let url = Bundle.main.url(forResource: "radar", withExtension: "caf") {
-            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            // Используем .ambient чтобы звук таймера не прерывал музыку в других приложениях
+            try? AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default)
             try? AVAudioSession.sharedInstance().setActive(true)
             player = try? AVAudioPlayer(contentsOf: url)
             player?.play()
         }
 
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notificationID])
+    }
+    
+    // MARK: - Live Activity
+    
+    private func startLiveActivity(endTime: Date, exerciseName: String?) {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        
+        let attributes = TimerAttributes(exerciseName: exerciseName)
+        let state = TimerAttributes.ContentState(endTime: endTime)
+        let content = ActivityContent(state: state, staleDate: nil)
+        
+        do {
+            currentActivity = try Activity.request(
+                attributes: attributes,
+                content: content,
+                pushType: nil
+            )
+        } catch {
+            print("⚠️ Error starting Live Activity: \(error.localizedDescription)")
+        }
+    }
+    
+    private func endLiveActivity() {
+        Task {
+            for activity in Activity<TimerAttributes>.activities {
+                await activity.end(nil, dismissalPolicy: .immediate)
+            }
+            currentActivity = nil
+        }
     }
 }

@@ -9,7 +9,6 @@ struct GifSearchSheet: View {
     @State private var isLoading = false
     @State private var errorMsg: String?
     @State private var previewItem: ExerciseDBItem?
-    @State private var previewGifData: Data?
     @State private var searchTask: Task<Void, Never>?
 
     var body: some View {
@@ -48,10 +47,12 @@ struct GifSearchSheet: View {
                 }
             }
             .sheet(item: $previewItem) { item in
-                GifPreviewSheet(item: item, gifData: previewGifData) {
+                GifPreviewSheet(item: item) {
                     onSelect(item.gifUrl)
                     previewItem = nil
-                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        dismiss()
+                    }
                 }
             }
         }
@@ -61,6 +62,12 @@ struct GifSearchSheet: View {
                 query = initialQuery
                 performSearch()
             }
+        }
+        .onChange(of: previewItem) { _, newValue in
+            // Если превью закрылось и у нас есть выбранный URL в родительском вью (который проставился через onSelect),
+            // мы можем закрыть и этот поиск. 
+            // Но в ExerciseEditView мы обновляем модель. 
+            // Лучше закрывать GifSearchSheet когда onSelect вызван.
         }
     }
 
@@ -252,12 +259,7 @@ struct GifSearchSheet: View {
     }
 
     private func loadPreview(_ item: ExerciseDBItem) {
-        previewGifData = nil
         previewItem = item
-        Task {
-            let data = await ExerciseGifManager.shared.loadGif(from: item.gifUrl)
-            await MainActor.run { previewGifData = data }
-        }
     }
 }
 
@@ -288,9 +290,9 @@ struct AsyncGifThumbnail: View {
 
 struct GifPreviewSheet: View {
     let item: ExerciseDBItem
-    let gifData: Data?
     let onSelect: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var gifData: Data?
 
     var body: some View {
         NavigationStack {
@@ -325,7 +327,10 @@ struct GifPreviewSheet: View {
                         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.04), lineWidth: 1))
                         .padding(.horizontal, 16)
 
-                        Button(action: onSelect) {
+                        Button {
+                            onSelect()
+                            dismiss()
+                        } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: "checkmark.circle.fill")
                                 Text("Выбрать этот GIF")
@@ -351,6 +356,9 @@ struct GifPreviewSheet: View {
                         .foregroundStyle(Color(hex: "#6b6b80"))
                 }
             }
+        }
+        .task {
+            gifData = await ExerciseGifManager.shared.loadGif(from: item.gifUrl)
         }
         .preferredColorScheme(.dark)
     }

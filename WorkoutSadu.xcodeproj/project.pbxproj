@@ -8,9 +8,11 @@
 
 /* Begin PBXBuildFile section */
 		6121EE8A2F67155E00058511 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 6121EE3B2F67155E00058511 /* README.md */; };
+		61252DB12F823C6C004385E0 /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 61A100022F4E000000000002 /* ActivityKit.framework */; };
 		614C5A422F4DD5E900AE3FF7 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 614C5A232F4DD5C000AE3FF7 /* WidgetKit.framework */; };
 		614C5A432F4DD5E900AE3FF7 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 614C5A252F4DD5C000AE3FF7 /* SwiftUI.framework */; };
 		614C5A502F4DD5EB00AE3FF7 /* WorkoutSaduWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 614C5A412F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		61A100012F4E000000000001 /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 61A100022F4E000000000002 /* ActivityKit.framework */; };
 		61BC01012F4DD7000072394A /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 61BC01032F4DD7000072394A /* FirebaseAuth */; };
 		61BC01022F4DD7000072394A /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 61BC01042F4DD7000072394A /* FirebaseStorage */; };
 		61C5CB012F4B70B60072394A /* FirebaseAI in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB002F4B70B60072394A /* FirebaseAI */; };
@@ -20,6 +22,7 @@
 		61C5CB092F4B70B60072394A /* FirebaseAnalyticsIdentitySupport in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB082F4B70B60072394A /* FirebaseAnalyticsIdentitySupport */; };
 		61C5CB0C2F4B75A70072394A /* GoogleGenerativeAI in Frameworks */ = {isa = PBXBuildFile; productRef = 61C5CB0B2F4B75A70072394A /* GoogleGenerativeAI */; };
 		61SE40012F4DD6000072394A /* ShareReceiptExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 61SE41012F4DD6000072394A /* ShareReceiptExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		61A100032F4E000000000003 /* SharedLiveActivityTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61A100042F4E000000000004 /* SharedLiveActivityTypes.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -77,6 +80,8 @@
 		614C5A252F4DD5C000AE3FF7 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		614C5A412F4DD5E900AE3FF7 /* WorkoutSaduWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WorkoutSaduWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		614C5A592F4DD60700AE3FF7 /* WorkoutSaduWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WorkoutSaduWidgetExtension.entitlements; sourceTree = "<group>"; };
+		61A100042F4E000000000004 /* SharedLiveActivityTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLiveActivityTypes.swift; sourceTree = "<group>"; };
+		61A100022F4E000000000002 /* ActivityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = System/Library/Frameworks/ActivityKit.framework; sourceTree = SDKROOT; };
 		61SE41012F4DD6000072394A /* ShareReceiptExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareReceiptExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -136,6 +141,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				61252DB12F823C6C004385E0 /* ActivityKit.framework in Frameworks */,
 				61C5CB032F4B70B60072394A /* FirebaseAILogic in Frameworks */,
 				61C5CB092F4B70B60072394A /* FirebaseAnalyticsIdentitySupport in Frameworks */,
 				61C5CB012F4B70B60072394A /* FirebaseAI in Frameworks */,
@@ -165,6 +171,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				61A100012F4E000000000001 /* ActivityKit.framework in Frameworks */,
 				614C5A432F4DD5E900AE3FF7 /* SwiftUI.framework in Frameworks */,
 				614C5A422F4DD5E900AE3FF7 /* WidgetKit.framework in Frameworks */,
 			);
@@ -210,6 +217,7 @@
 		614C5A222F4DD5C000AE3FF7 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				61A100022F4E000000000002 /* ActivityKit.framework */,
 				614C5A232F4DD5C000AE3FF7 /* WidgetKit.framework */,
 				614C5A252F4DD5C000AE3FF7 /* SwiftUI.framework */,
 			);
@@ -552,7 +560,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -610,7 +618,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -635,6 +643,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Камера используется для сканирования чеков и фото упражнений";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Микрофон используется для голосового ввода транзакций";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Распознавание речи для голосового ввода транзакций";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -672,6 +681,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Камера используется для сканирования чеков и фото упражнений";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Микрофон используется для голосового ввода транзакций";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Распознавание речи для голосового ввода транзакций";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -702,7 +712,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8PRZ5T6DB3;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "-23.WorkoutSaduTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -724,7 +734,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8PRZ5T6DB3;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "-23.WorkoutSaduTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";

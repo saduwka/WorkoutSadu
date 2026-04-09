@@ -1,5 +1,6 @@
 import WidgetKit
 import SwiftUI
+import ActivityKit
 
 // MARK: - Data
 
@@ -456,6 +457,97 @@ struct WidgetEntryView: View {
 struct WorkoutSaduWidgetBundle: WidgetBundle {
     var body: some Widget {
         WorkoutSaduWidget()
+        TimerLiveActivity()
+    }
+}
+
+// MARK: - Live Activity View
+
+struct TimerLiveActivity: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: TimerAttributes.self) { context in
+            LiveActivityView(context: context)
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "timer")
+                            .foregroundStyle(Color(hex: "#ff5c3a"))
+                        Text("Отдых")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Color(hex: "#ff5c3a"))
+                    }
+                }
+                DynamicIslandExpandedRegion(.trailing) {
+                    Text(timerInterval: context.state.endTime.addingTimeInterval(-3600*24)...context.state.endTime, countsDown: true)
+                        .monospacedDigit()
+                        .font(.system(size: 20, weight: .black))
+                        .foregroundStyle(Color(hex: "#3aff9e"))
+                        .frame(width: 80)
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    if let name = context.attributes.exerciseName {
+                        Text(name)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color(hex: "#6b6b80"))
+                    }
+                }
+            } compactLeading: {
+                Image(systemName: "timer")
+                    .foregroundStyle(Color(hex: "#ff5c3a"))
+            } compactTrailing: {
+                Text(timerInterval: context.state.endTime.addingTimeInterval(-3600*24)...context.state.endTime, countsDown: true)
+                    .monospacedDigit()
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color(hex: "#3aff9e"))
+            } minimal: {
+                Image(systemName: "timer")
+                    .foregroundStyle(Color(hex: "#ff5c3a"))
+            }
+        }
+    }
+}
+
+struct LiveActivityView: View {
+    let context: ActivityViewContext<TimerAttributes>
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Image(systemName: "timer")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color(hex: "#ff5c3a"))
+                    Text("ОТДЫХ")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(Color(hex: "#6b6b80"))
+                        .tracking(1)
+                }
+                
+                if let name = context.attributes.exerciseName {
+                    Text(name)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                } else {
+                    Text("Следующий сет")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
+            
+            Spacer()
+            
+            VStack(alignment: .trailing, spacing: 0) {
+                Text(timerInterval: context.state.endTime.addingTimeInterval(-3600*24)...context.state.endTime, countsDown: true)
+                    .monospacedDigit()
+                    .font(.system(size: 28, weight: .black, design: .rounded))
+                    .foregroundStyle(Color(hex: "#3aff9e"))
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 15)
+        .background(Color(hex: "#0e0e12"))
     }
 }
 

@@ -395,7 +395,9 @@ struct ExerciseView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { withAnimation { showPRCelebration = false } }
         }
 
-        if let s = workoutExercise.timerSeconds, s > 0 { timerManager.start(seconds: s, exerciseID: workoutExercise.id.uuidString) }
+        if let s = workoutExercise.timerSeconds, s > 0 { 
+            timerManager.start(seconds: s, exerciseID: workoutExercise.id.uuidString, exerciseName: workoutExercise.exercise.name) 
+        }
         if sortedSets.last?.id == set.id {
             let s = WorkoutSet(order: set.order + 1, reps: set.reps, weight: set.weight)
             context.insert(s); workoutExercise.workoutSets.append(s)
