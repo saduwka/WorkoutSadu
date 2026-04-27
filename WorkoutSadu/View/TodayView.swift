@@ -14,6 +14,7 @@ struct TodayView: View {
     @Query(sort: \NotificationEntry.date, order: .reverse) private var notificationEntries: [NotificationEntry]
     @Query private var profiles: [BodyProfile]
     @State private var showNotifications = false
+    @State private var todaySteps: Int = 0
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -88,6 +89,7 @@ struct TodayView: View {
                 ScrollView {
                     VStack(spacing: 14) {
                         headerCard
+                        if todaySteps > 0 { stepsCard }
                         if activeWorkout != nil { activeWorkoutCard }
                         habitsCard
                         todosCard
@@ -140,6 +142,18 @@ struct TodayView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .task {
+            await refreshSteps()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            Task { await refreshSteps() }
+        }
+    }
+
+    private func refreshSteps() async {
+        guard profiles.first?.healthKitEnabled == true else { return }
+        let steps = await HealthKitManager.shared.fetchSteps(for: Date())
+        todaySteps = Int(steps)
     }
 
     // MARK: - Header
@@ -155,6 +169,41 @@ struct TodayView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
+    }
+
+    // MARK: - Steps
+
+    private var stepsCard: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "figure.walk")
+                .font(.system(size: 20))
+                .foregroundStyle(Color(hex: "#3aff9e"))
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text("ШАГИ СЕГОДНЯ")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color(hex: "#6b6b80"))
+                    .tracking(1)
+                Text("\(todaySteps)")
+                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(hex: "#f0f0f5"))
+            }
+            Spacer()
+            
+            // Индикатор цели (например 10к)
+            let progress = min(1.0, Double(todaySteps) / 10000.0)
+            ZStack {
+                Circle()
+                    .stroke(Color(hex: "#1a1a24"), lineWidth: 4)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(Color(hex: "#3aff9e"), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 36, height: 36)
+        }
+        .padding(14)
+        .darkCard()
     }
 
     // MARK: - Active workout

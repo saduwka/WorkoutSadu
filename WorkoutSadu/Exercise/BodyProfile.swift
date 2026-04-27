@@ -29,6 +29,7 @@ final class BodyProfile {
     var bodyFatPercent: Double? = nil
     /// Цель: похудеть, набрать мышцы, удержать, набрать вес.
     var goalRaw: String = ""
+    var healthKitEnabled: Bool = false
     var updatedAt: Date = Date()
 
     init(
@@ -39,7 +40,8 @@ final class BodyProfile {
         restingHeartRate: Int = 0,
         bodyFatPercent: Double? = nil,
         goalRaw: String = "",
-        targetWeightKg: Double = 0
+        targetWeightKg: Double = 0,
+        healthKitEnabled: Bool = false
     ) {
         self.weight = weight
         self.height = height
@@ -49,6 +51,7 @@ final class BodyProfile {
         self.bodyFatPercent = bodyFatPercent
         self.goalRaw = goalRaw
         self.targetWeightKg = targetWeightKg
+        self.healthKitEnabled = healthKitEnabled
         self.updatedAt = Date()
     }
 

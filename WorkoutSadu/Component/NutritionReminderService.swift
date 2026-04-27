@@ -20,7 +20,59 @@ enum NutritionReminderService {
     /// Часы дня, когда показываем напоминание про перекус (включительно).
     private static let snackActiveHours = 8...21
 
-    /// Проверить данные и при выполнении условий запланировать уведомления. Вызывать с главного потока, с тем же context, что и UI.
+    /// Запланировать повторяющиеся уведомления по расписанию (вызывать один раз при старте).
+    static func scheduleRecurringReminders() {
+        scheduleFoodReminders()
+        scheduleWaterReminders()
+    }
+
+    private static func scheduleFoodReminders() {
+        let times = [
+            (9, 0, "Что на завтрак? 🍳", "breakfast"),
+            (14, 0, "Время обеда! Что полезного съели? 🥗", "lunch"),
+            (21, 0, "Ужин был? Запишите калории 🌙", "dinner")
+        ]
+        
+        for (h, m, body, type) in times {
+            let content = UNMutableNotificationContent()
+            content.title = "Life Bro"
+            content.body = body
+            content.sound = .default
+            content.userInfo = ["type": "nutritionPrompt", "meal": type]
+            
+            var components = DateComponents()
+            components.hour = h
+            components.minute = m
+            
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+            let request = UNNotificationRequest(identifier: "lifebro.food.\(type)", content: content, trigger: trigger)
+            UNUserNotificationCenter.current().add(request)
+        }
+    }
+
+    private static func scheduleWaterReminders() {
+        let times = [
+            (11, 0), (15, 0), (18, 0)
+        ]
+        
+        for (h, m) in times {
+            let content = UNMutableNotificationContent()
+            content.title = "Life Bro"
+            content.body = "Не забудь попить воды 💧"
+            content.sound = .default
+            content.userInfo = ["type": "nutritionWater"]
+            
+            var components = DateComponents()
+            components.hour = h
+            components.minute = m
+            
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+            let request = UNNotificationRequest(identifier: "lifebro.water.\(h)", content: content, trigger: trigger)
+            UNUserNotificationCenter.current().add(request)
+        }
+    }
+
+    /// Проверить данные и при выполнении условий запланировать уведомления. Вызывать при возврате в приложение.
     static func checkAndSchedule(context: ModelContext) {
         let now = Date()
         let cal = Calendar.current

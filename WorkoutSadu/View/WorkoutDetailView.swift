@@ -183,6 +183,7 @@ struct EditWorkoutTimeSheet: View {
     @Bindable var workout: Workout
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Query private var profiles: [BodyProfile]
     @State private var editStartedAt: Date
     @State private var editFinishedAt: Date
 
@@ -256,6 +257,12 @@ struct EditWorkoutTimeSheet: View {
         guard editFinishedAt >= editStartedAt else { return }
         workout.startedAt = editStartedAt
         workout.finishedAt = editFinishedAt
+
+        if let profile = profiles.first, profile.healthKitEnabled {
+            let kcal = CalorieCalculator.burned(workout: workout, profile: profile)
+            Task { await HealthKitManager.shared.saveWorkout(workout, calories: kcal) }
+        }
+
         try? context.save()
         WidgetDataManager.sync(context: context)
         WidgetCenter.shared.reloadAllTimelines()

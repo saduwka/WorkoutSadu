@@ -23,6 +23,7 @@ struct FoodView: View {
     @State private var showAddMeal = false
     @State private var editingMeal: EditMealItem?
     @State private var caloriesDate: Date = Date()
+    @State private var healthBurned: Int? = nil
 
     private var mealsForSelectedDay: [MealEntry] {
         let cal = Calendar.current
@@ -42,7 +43,8 @@ struct FoodView: View {
     private var carbsToday: Double { mealsForSelectedDay.reduce(0) { $0 + $1.carbs } }
 
     private var burnedToday: Int {
-        CalorieCalculator.burnedOnDay(caloriesDate, workouts: workouts, profile: profiles.first)
+        if let hb = healthBurned { return hb }
+        return CalorieCalculator.burnedOnDay(caloriesDate, workouts: workouts, profile: profiles.first)
     }
 
     var body: some View {
@@ -75,10 +77,27 @@ struct FoodView: View {
             .sheet(item: $editingMeal) { item in
                 EditMealSheet(meal: item.meal)
             }
+            .task(id: caloriesDate) {
+                await refreshHealthCalories()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                Task { await refreshHealthCalories() }
+            }
         }
-        .onAppear { gymBro.screenContext = "Еда / калории" }
+        .onAppear {
+            gymBro.screenContext = "Еда / калории"
+        }
         .onDisappear { gymBro.screenContext = nil }
         .preferredColorScheme(.dark)
+    }
+
+    private func refreshHealthCalories() async {
+        guard profiles.first?.healthKitEnabled == true else {
+            healthBurned = nil
+            return
+        }
+        let kcal = await HealthKitManager.shared.fetchActiveEnergyBurned(for: caloriesDate)
+        healthBurned = Int(kcal)
     }
 
     // MARK: - Day picker
@@ -172,10 +191,12 @@ struct FoodView: View {
         .darkCard()
         .padding(.horizontal, 16)
     }
-
     private func addWater(_ ml: Int) {
         let entry = WaterEntry(date: caloriesDate, amountML: ml)
         context.insert(entry)
+        if profiles.first?.healthKitEnabled == true {
+            Task { await HealthKitManager.shared.saveWater(amountML: ml, date: caloriesDate) }
+        }
         try? context.save()
     }
 

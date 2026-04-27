@@ -331,6 +331,7 @@ struct AddMealView: View {
     }
 
     private func saveMeals() {
+        let isHKEnabled = profiles.first?.healthKitEnabled ?? false
         for food in parsedFoods {
             let entry = MealEntry(
                 name: food.name,
@@ -343,6 +344,9 @@ struct AddMealView: View {
                 mealType: selectedMealType
             )
             context.insert(entry)
+            if isHKEnabled {
+                Task { await HealthKitManager.shared.saveMeal(entry) }
+            }
         }
         try? context.save()
     }

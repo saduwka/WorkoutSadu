@@ -448,12 +448,32 @@ final class FirebaseBackupService {
     private func upload(data: Data) async throws {
         guard let uid = Auth.auth().currentUser?.uid else { throw NSError(domain: "FirebaseBackup", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not signed in"]) }
         let ref = Storage.storage().reference().child(storagePath).child(uid).child("latest.json")
-        _ = try await ref.putData(data, metadata: nil)
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            ref.putData(data, metadata: nil) { metadata, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
     }
 
     private func download() async throws -> Data {
         guard let uid = Auth.auth().currentUser?.uid else { throw NSError(domain: "FirebaseBackup", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not signed in"]) }
         let ref = Storage.storage().reference().child(storagePath).child(uid).child("latest.json")
-        return try await ref.data(maxSize: 10 * 1024 * 1024) // 10MB limit
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            ref.getData(maxSize: 10 * 1024 * 1024) { data, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else if let data = data {
+                    continuation.resume(returning: data)
+                } else {
+                    continuation.resume(throwing: NSError(domain: "FirebaseBackup", code: -2, userInfo: [NSLocalizedDescriptionKey: "No data found"]))
+                }
+            }
+        }
     }
 }

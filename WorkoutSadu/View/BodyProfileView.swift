@@ -39,6 +39,8 @@ struct BodyProfileView: View {
                         }
                         // Weight history
                         weightHistoryCard
+                        // HealthKit sync
+                        healthKitSyncCard
                         // Data management
                         dataManagementCard
                     }
@@ -66,7 +68,13 @@ struct BodyProfileView: View {
                 Button("Сохранить") {
                     if let w = Double(newWeightText.replacingOccurrences(of: ",", with: ".")), w > 0 {
                         context.insert(WeightEntry(weight: w))
-                        if let p = profile { p.weight = w; p.updatedAt = Date() }
+                        if let p = profile {
+                            p.weight = w
+                            p.updatedAt = Date()
+                            if p.healthKitEnabled {
+                                Task { await HealthKitManager.shared.saveWeight(w, date: Date()) }
+                            }
+                        }
                     }
                     newWeightText = ""
                 }
@@ -202,6 +210,39 @@ struct BodyProfileView: View {
                     Text("Записать вес").font(.system(size: 15, weight: .medium)).foregroundStyle(Color(hex: "#ff5c3a"))
                 }
             }
+        }
+        .padding(18).darkCard()
+    }
+
+    private var healthKitSyncCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Image(systemName: "heart.fill").foregroundStyle(Color.red)
+                Text("APPLE HEALTH")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color(hex: "#6b6b80")).tracking(1)
+            }
+
+            Toggle("Синхронизация", isOn: Binding(
+                get: { profile?.healthKitEnabled ?? false },
+                set: { newValue in
+                    if let p = profile {
+                        p.healthKitEnabled = newValue
+                        if newValue {
+                            Task {
+                                try? await HealthKitManager.shared.requestAuthorization()
+                            }
+                        }
+                    }
+                }
+            ))
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(Color(hex: "#f0f0f5"))
+            .tint(Color(hex: "#ff5c3a"))
+
+            Text("Синхронизация тренировок, веса, воды и калорий с приложением Здоровье.")
+                .font(.system(size: 11))
+                .foregroundStyle(Color(hex: "#6b6b80"))
         }
         .padding(18).darkCard()
     }
@@ -415,7 +456,13 @@ struct BodyProfileEditView: View {
 
     private func save() {
         let fix = { (s: String) in s.replacingOccurrences(of: ",", with: ".") }
-        if let w = Double(fix(weightText)) { profile.weight = w }
+        if let w = Double(fix(weightText)) {
+            let oldWeight = profile.weight
+            profile.weight = w
+            if w != oldWeight && profile.healthKitEnabled {
+                Task { await HealthKitManager.shared.saveWeight(w, date: Date()) }
+            }
+        }
         if let h = Double(fix(heightText)) { profile.height = h }
         if useBirthDate {
             profile.birthDate = birthDatePicker

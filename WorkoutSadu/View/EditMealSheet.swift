@@ -4,6 +4,8 @@ import SwiftData
 /// Редактирование записи о еде: название, КБЖУ, тип приёма, дата и время.
 struct EditMealSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
+    @Query private var profiles: [BodyProfile]
     @Bindable var meal: MealEntry
 
     @State private var name: String = ""
@@ -132,5 +134,10 @@ struct EditMealSheet: View {
         meal.carbs = Double(carbsText.replacingOccurrences(of: ",", with: ".")) ?? 0
         meal.date = mealDate
         meal.mealType = selectedMealType
+
+        if profiles.first?.healthKitEnabled == true {
+            Task { await HealthKitManager.shared.saveMeal(meal) }
+        }
+        try? context.save()
     }
 }

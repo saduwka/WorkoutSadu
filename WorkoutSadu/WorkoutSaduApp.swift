@@ -24,6 +24,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         FirebaseApp.configure()
         ReportManager.shared.scheduleAllReportNotifications()
+        NutritionReminderService.scheduleRecurringReminders()
         CFNotificationCenterAddObserver(
             CFNotificationCenterGetDarwinNotifyCenter(),
             nil,
@@ -43,6 +44,7 @@ extension Notification.Name {
 class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationDelegate()
     static var pendingGymBroOpen = false
+    static var pendingNutritionOpen = false
     /// По тапу на отчёт: открыть полноценный отчёт (день/неделя/месяц).
     static var pendingReportType: String?
     static var pendingReportDate: Date?
@@ -60,6 +62,8 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         if type == "gymBroComment" {
             Self.pendingGymBroOpen = true
             NotificationCenter.default.post(name: .openGymBroChat, object: nil)
+        } else if type == "nutritionPrompt" || type == "nutritionWater" || type == "nutritionSnack" {
+            Self.pendingNutritionOpen = true
         } else if type == "dayReport" || type == "weekReport" || type == "monthReport" {
             let cal = Calendar.current
             let now = Date()
@@ -217,6 +221,9 @@ struct WorkoutApp: App {
                     reportFromNotificationDate = d
                     selectedTab = 4
                     showReportFromNotification = true
+                } else if NotificationDelegate.pendingNutritionOpen {
+                    NotificationDelegate.pendingNutritionOpen = false
+                    selectedTab = 1
                 } else if PendingReceiptStorage.hasPendingReceiptFile() {
                     selectedTab = 3
                 }
@@ -241,7 +248,8 @@ struct WorkoutApp: App {
             FinanceTransaction.self, FinanceAccount.self,
             Habit.self, HabitEntry.self, TodoItem.self, WeeklyGoal.self,
             MoodEntry.self, SavedReport.self,
-            WaterEntry.self, NotificationEntry.self
+            WaterEntry.self, NotificationEntry.self,
+            MonthPlan.self, PlanWeek.self, PlanDay.self, PlanExercise.self
         ])
     }
 }

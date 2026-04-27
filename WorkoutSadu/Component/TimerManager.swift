@@ -147,14 +147,16 @@ class TimerManager: ObservableObject {
         let state = TimerAttributes.ContentState(endTime: endTime)
         let content = ActivityContent(state: state, staleDate: nil)
         
-        do {
-            currentActivity = try Activity.request(
-                attributes: attributes,
-                content: content,
-                pushType: nil
-            )
-        } catch {
-            print("⚠️ Error starting Live Activity: \(error.localizedDescription)")
+        Task {
+            do {
+                currentActivity = try Activity.request(
+                    attributes: attributes,
+                    content: content,
+                    pushType: nil
+                )
+            } catch {
+                print("⚠️ Error starting Live Activity: \(error.localizedDescription)")
+            }
         }
     }
     

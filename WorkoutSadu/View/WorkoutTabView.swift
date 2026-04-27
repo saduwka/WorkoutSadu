@@ -27,6 +27,8 @@ struct HealthTabView: View {
                     StatsView()
                 case 3:
                     FoodView()
+                case 4:
+                    MonthPlanView()
                 default:
                     WorkoutListView(
                         externalWorkout: $workoutFromTemplate,
@@ -44,7 +46,8 @@ struct HealthTabView: View {
                 ("Трен.", "dumbbell.fill"),
                 ("Шаблоны", "doc.on.doc"),
                 ("Прогресс", "chart.line.uptrend.xyaxis"),
-                ("Еда", "fork.knife")
+                ("Еда", "fork.knife"),
+                ("План", "calendar")
             ]
 
             ForEach(Array(tabs.enumerated()), id: \.offset) { i, tab in

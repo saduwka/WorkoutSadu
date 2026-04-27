@@ -7,6 +7,7 @@ struct CreateWorkoutView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Environment(GymBroManager.self) private var gymBro
+    @Query private var profiles: [BodyProfile]
     @Bindable var workout: Workout
     @State private var showExercisePicker = false
     @State private var showDiscardAlert = false
@@ -103,7 +104,12 @@ struct CreateWorkoutView: View {
                                     }
                                 }
                                 .swipeActions(edge: .trailing) {
-                                    Button(role: .destructive) { context.delete(we) } label: {
+                                    Button(role: .destructive) {
+                                        if let index = workout.workoutExercises.firstIndex(where: { $0.id == we.id }) {
+                                            workout.workoutExercises.remove(at: index)
+                                        }
+                                        context.delete(we)
+                                    } label: {
                                         Label("Удалить", systemImage: "trash")
                                     }
                                 }
@@ -152,6 +158,12 @@ struct CreateWorkoutView: View {
                             workout.date = Date()
                             workout.finishedAt = Date()
                             stopElapsedTimer()
+
+                            if let profile = profiles.first, profile.healthKitEnabled {
+                                let kcal = CalorieCalculator.burned(workout: workout, profile: profile)
+                                Task { await HealthKitManager.shared.saveWorkout(workout, calories: kcal) }
+                            }
+
                             WidgetDataManager.sync(context: context)
                             WidgetCenter.shared.reloadAllTimelines()
                             dismiss()
