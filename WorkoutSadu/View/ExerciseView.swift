@@ -19,6 +19,10 @@ struct ExerciseView: View {
     private var isCardio: Bool { workoutExercise.exercise.bodyPart == BodyPart.cardio.rawValue }
     private var sortedSets: [WorkoutSet] { workoutExercise.workoutSets.sorted { $0.order < $1.order } }
 
+    private var setSyncSignature: String {
+        sortedSets.map { "\($0.id.uuidString):\($0.weight):\($0.reps):\($0.isCompleted)" }.joined(separator: "|")
+    }
+
     private var historyPoints: [(date: Date, weight: Double)] {
         let exerciseName = workoutExercise.exercise.name
         let bodyPart = workoutExercise.exercise.bodyPart
@@ -30,7 +34,7 @@ struct ExerciseView: View {
                   we.exercise.bodyPart == bodyPart,
                   let workout = we.workout else { continue }
             let maxW = we.workoutSets.filter { $0.isCompleted }.map(\.weight).max() ?? 0
-            guard maxW > 0 else { continue }
+            guard maxW != 0 else { continue }
             points.append((workout.date, maxW))
         }
         return points.sorted { $0.0 < $1.0 }
@@ -94,10 +98,27 @@ struct ExerciseView: View {
                         .frame(maxWidth: .infinity)
                         .padding(20)
                         .darkCard(accentBorder: Color(hex: "#ff5c3a").opacity(0.3))
+                    } else if timerManager.isAlerting,
+                              timerManager.exerciseID == workoutExercise.id.uuidString {
+                        VStack(spacing: 8) {
+                            Text("ОТДЫХ ОКОНЧЕН")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color(hex: "#6b6b80"))
+                                .tracking(1)
+                            Text("Время следующего сета")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(Color(hex: "#f0f0f5"))
+                            Button("Отключить") { timerManager.stop() }
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Color(hex: "#ff5c3a"))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(20)
+                        .darkCard(accentBorder: Color(hex: "#ff5c3a").opacity(0.3))
                     }
 
                     // PR banner
-                    if !isCardio, let best = PRManager.bestWeight(for: workoutExercise.exercise, in: context), best > 0 {
+                    if !isCardio, let best = PRManager.bestWeight(for: workoutExercise.exercise, in: context), best != 0 {
                         HStack {
                             Image(systemName: "trophy.fill").foregroundStyle(Color(hex: "#ffb830"))
                             Text("Личный рекорд")
@@ -110,6 +131,22 @@ struct ExerciseView: View {
                         }
                         .padding(14)
                         .darkCard(accentBorder: Color(hex: "#ffb830").opacity(0.3))
+                    }
+
+                    // Working weight banner
+                    if !isCardio, let ww = PRManager.workingWeight(for: workoutExercise.exercise, in: context) {
+                        HStack {
+                            Image(systemName: "dumbbell.fill").foregroundStyle(Color(hex: "#4a8cff"))
+                            Text("Рабочий вес")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Color(hex: "#f0f0f5"))
+                            Spacer()
+                            Text(String(format: "%.1f кг × %d", ww.weight, ww.reps))
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(Color(hex: "#4a8cff"))
+                        }
+                        .padding(14)
+                        .darkCard(accentBorder: Color(hex: "#4a8cff").opacity(0.3))
                     }
 
                     // History chart
@@ -202,6 +239,8 @@ struct ExerciseView: View {
                                     }
                                 }
                             }
+                            
+                            Spacer().frame(height: 8)
 
                             Button {
                                 addSet()
@@ -312,6 +351,11 @@ struct ExerciseView: View {
         .onAppear {
             gymBro.screenContext = "Упражнение: \(workoutExercise.exercise.name)"
             gymBro.screenContextImage = workoutExercise.photo
+            WatchConnectivityManager.shared.setCurrentExerciseID(workoutExercise.id)
+            WatchConnectivityManager.shared.publish(workout: workoutExercise.workout)
+        }
+        .onChange(of: setSyncSignature) { _, _ in
+            WatchConnectivityManager.shared.publish(workout: workoutExercise.workout)
         }
         .onDisappear {
             gymBro.screenContext = nil
@@ -383,24 +427,70 @@ struct ExerciseView: View {
         context.insert(s); workoutExercise.workoutSets.append(s)
     }
     private func completeSet(_ set: WorkoutSet) {
-        set.isCompleted = true; set.completedAt = Date()
-        // Если пользователь не нажал «Начать» — запускаем время тренировки при первом отмеченном подходе
-        if let w = workoutExercise.workout, w.startedAt == nil {
-            w.startedAt = set.completedAt
-            try? context.save()
-        }
-        if let pr = PRManager.check(set: set, exercise: workoutExercise.exercise, in: context) {
+        if let pr = WorkoutSessionActions.completeSet(
+            set: set,
+            workoutExercise: workoutExercise,
+            context: context,
+            timerManager: timerManager
+        ) {
             prResult = pr
             withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) { showPRCelebration = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { withAnimation { showPRCelebration = false } }
         }
+        WatchConnectivityManager.shared.setCurrentExerciseID(workoutExercise.id)
+        WatchConnectivityManager.shared.publish(workout: workoutExercise.workout)
+    }
+}
 
-        if let s = workoutExercise.timerSeconds, s > 0 { 
-            timerManager.start(seconds: s, exerciseID: workoutExercise.id.uuidString, exerciseName: workoutExercise.exercise.name) 
-        }
-        if sortedSets.last?.id == set.id {
-            let s = WorkoutSet(order: set.order + 1, reps: set.reps, weight: set.weight)
-            context.insert(s); workoutExercise.workoutSets.append(s)
+// MARK: - Components
+
+struct BubbleStepper: View {
+    let label: String
+    @Binding var value: Double
+    let step: Double
+    let range: ClosedRange<Double>
+    let specifier: String
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(label)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color(hex: "#6b6b80"))
+                .tracking(0.5)
+            
+            HStack(spacing: 0) {
+                Button { 
+                    let newValue = value - step
+                    if newValue >= range.lowerBound { value = newValue }
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundStyle(Color(hex: "#f0f0f5"))
+                        .frame(width: 38, height: 38)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                
+                Text(String(format: specifier, value))
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(hex: "#f0f0f5"))
+                    .frame(minWidth: 48)
+                
+                Button {
+                    let newValue = value + step
+                    if newValue <= range.upperBound { value = newValue }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundStyle(Color(hex: "#f0f0f5"))
+                        .frame(width: 38, height: 38)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .background(Color.white.opacity(0.06))
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 1))
         }
     }
 }
@@ -461,54 +551,40 @@ struct SetRow: View {
                 .frame(width: 24)
 
             // Weight
-            VStack(spacing: 2) {
-                Text("кг").font(.caption2).foregroundStyle(Color(hex: "#6b6b80"))
-                HStack(spacing: 6) {
-                    Button { set.weight = max(0, set.weight - 2.5) } label: {
-                        Image(systemName: "minus.circle").foregroundStyle(Color(hex: "#6b6b80"))
-                    }.buttonStyle(.borderless)
-                    Text("\(set.weight, specifier: "%.1f")")
-                        .font(.system(size: 15, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color(hex: "#f0f0f5"))
-                        .frame(minWidth: 50)
-                    Button { set.weight += 2.5 } label: {
-                        Image(systemName: "plus.circle").foregroundStyle(Color(hex: "#6b6b80"))
-                    }.buttonStyle(.borderless)
-                }
-            }
-
-            Rectangle().frame(width: 1).foregroundStyle(Color(hex: "#6b6b80").opacity(0.2)).frame(height: 30)
+            BubbleStepper(
+                label: "КГ",
+                value: $set.weight,
+                step: 2.5,
+                range: -999...999,
+                specifier: "%.1f"
+            )
 
             // Reps
-            VStack(spacing: 2) {
-                Text("повт").font(.caption2).foregroundStyle(Color(hex: "#6b6b80"))
-                HStack(spacing: 6) {
-                    Button { set.reps = max(1, set.reps - 1) } label: {
-                        Image(systemName: "minus.circle").foregroundStyle(Color(hex: "#6b6b80"))
-                    }.buttonStyle(.borderless)
-                    Text("\(set.reps)")
-                        .font(.system(size: 15, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color(hex: "#f0f0f5"))
-                        .frame(minWidth: 28)
-                    Button { set.reps += 1 } label: {
-                        Image(systemName: "plus.circle").foregroundStyle(Color(hex: "#6b6b80"))
-                    }.buttonStyle(.borderless)
-                }
-            }
+            BubbleStepper(
+                label: "ПОВТ",
+                value: Binding(get: { Double(set.reps) }, set: { set.reps = Int($0) }),
+                step: 1,
+                range: 1...999,
+                specifier: "%.0f"
+            )
 
             Spacer()
 
             Button {
                 guard !set.isCompleted else { return }
-                onComplete()
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    onComplete()
+                }
             } label: {
                 Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.title2)
-                    .foregroundStyle(set.isCompleted ? Color(hex: "#3aff9e") : Color(hex: "#6b6b80"))
+                    .font(.system(size: 28))
+                    .foregroundStyle(set.isCompleted ? Color(hex: "#3aff9e") : Color(hex: "#6b6b80").opacity(0.5))
+                    .contentShape(Circle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
         }
-        .padding(.vertical, 12)
-        .opacity(set.isCompleted ? 0.45 : 1)
+        .padding(.vertical, 16)
+        .opacity(set.isCompleted ? 0.5 : 1)
     }
 }
+

@@ -9,6 +9,7 @@ struct ExerciseEditView: View {
     @State private var timerMinutes = 0; @State private var timerSeconds = 0
     @State private var showGifSearch = false
     @State private var gifPreviewData: Data?
+    @AppStorage("isTimerSoundEnabled") private var isTimerSoundEnabled = true
 
     var body: some View {
         NavigationStack {
@@ -34,6 +35,9 @@ struct ExerciseEditView: View {
                                 .pickerStyle(.wheel).frame(maxWidth: .infinity)
                             }
                             .frame(height: 120)
+                            
+                            Toggle("Звук таймера", isOn: $isTimerSoundEnabled)
+                                .tint(Color(hex: "#ff5c3a"))
                         } header: { Text("Таймер отдыха") }
                         footer: { Text("Запускается после каждого сета") }
                     }

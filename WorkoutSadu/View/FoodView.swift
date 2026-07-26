@@ -43,8 +43,13 @@ struct FoodView: View {
     private var carbsToday: Double { mealsForSelectedDay.reduce(0) { $0 + $1.carbs } }
 
     private var burnedToday: Int {
-        if let hb = healthBurned { return hb }
-        return CalorieCalculator.burnedOnDay(caloriesDate, workouts: workouts, profile: profiles.first)
+        let calc = CalorieCalculator.burnedOnDay(caloriesDate, workouts: workouts, profile: profiles.first)
+        if let hb = healthBurned, hb > 0 {
+            print("🔥 FoodView: HealthKit (\(hb)) vs Calc (\(calc)). Using Max.")
+            return max(hb, calc)
+        }
+        print("🔥 FoodView: using CalcBurned = \(calc) (HealthKit is 0 or nil)")
+        return calc
     }
 
     var body: some View {
@@ -77,8 +82,14 @@ struct FoodView: View {
             .sheet(item: $editingMeal) { item in
                 EditMealSheet(meal: item.meal)
             }
-            .task(id: caloriesDate) {
+            .task {
                 await refreshHealthCalories()
+            }
+            .onAppear {
+                Task { await refreshHealthCalories() }
+            }
+            .onChange(of: caloriesDate) { _, _ in
+                Task { await refreshHealthCalories() }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                 Task { await refreshHealthCalories() }
@@ -93,10 +104,12 @@ struct FoodView: View {
 
     private func refreshHealthCalories() async {
         guard profiles.first?.healthKitEnabled == true else {
+            print("🚫 FoodView: HealthKit is disabled in profile")
             healthBurned = nil
             return
         }
         let kcal = await HealthKitManager.shared.fetchActiveEnergyBurned(for: caloriesDate)
+        print("🥗 FoodView: Refreshed HealthBurned = \(kcal)")
         healthBurned = Int(kcal)
     }
 

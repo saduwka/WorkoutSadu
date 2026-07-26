@@ -1,0 +1,12 @@
+services:
+  workout-backup:
+    build: .
+    container_name: workout-sadu-backup
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      BACKUP_TOKEN: ${BACKUP_TOKEN:?Set BACKUP_TOKEN in .env}
+      BACKUP_RETENTION_DAYS: "30"
+    volumes:
+      - ./data:/data

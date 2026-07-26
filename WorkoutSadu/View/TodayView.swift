@@ -3,6 +3,7 @@ import SwiftData
 
 struct TodayView: View {
     @Binding var selectedTab: Int
+    @Binding var tasksSection: Int
     @Environment(\.modelContext) private var context
     @State private var showDayReport = false
     @Query(sort: \Workout.date, order: .reverse) private var workouts: [Workout]
@@ -15,6 +16,8 @@ struct TodayView: View {
     @Query private var profiles: [BodyProfile]
     @State private var showNotifications = false
     @State private var todaySteps: Int = 0
+    @AppStorage("userDisplayName") private var userDisplayName = ""
+    @State private var workoutToResume: Workout?
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -31,6 +34,10 @@ struct TodayView: View {
         f.locale = Locale(identifier: "ru_RU")
         f.dateFormat = "EEEE, d MMMM"
         return f.string(from: Date()).capitalized
+    }
+
+    private var trimmedDisplayName: String {
+        userDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var todayWorkouts: [Workout] {
@@ -140,6 +147,9 @@ struct TodayView: View {
             .sheet(isPresented: $showDayReport) {
                 DayReportView(date: Date())
             }
+            .fullScreenCover(item: $workoutToResume) { workout in
+                CreateWorkoutView(workout: workout)
+            }
         }
         .preferredColorScheme(.dark)
         .task {
@@ -163,6 +173,11 @@ struct TodayView: View {
             Text(greeting)
                 .font(.custom("BebasNeue-Regular", size: 32))
                 .foregroundStyle(Color(hex: "#f0f0f5"))
+            if !trimmedDisplayName.isEmpty {
+                Text(trimmedDisplayName)
+                    .font(.custom("BebasNeue-Regular", size: 22))
+                    .foregroundStyle(Color(hex: "#ff5c3a"))
+            }
             Text(dateString)
                 .font(.system(size: 13))
                 .foregroundStyle(Color(hex: "#6b6b80"))
@@ -209,27 +224,36 @@ struct TodayView: View {
     // MARK: - Active workout
 
     private var activeWorkoutCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "flame.fill")
-                    .foregroundStyle(Color(hex: "#ff5c3a"))
-                Text("ТРЕНИРОВКА В ПРОЦЕССЕ")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(Color(hex: "#ff5c3a"))
-                    .tracking(1)
+        Button {
+            workoutToResume = activeWorkout
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "flame.fill")
+                        .foregroundStyle(Color(hex: "#ff5c3a"))
+                    Text("ТРЕНИРОВКА В ПРОЦЕССЕ")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color(hex: "#ff5c3a"))
+                        .tracking(1)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#6b6b80"))
+                }
+                if let w = activeWorkout {
+                    Text(w.name.isEmpty ? "Тренировка" : w.name)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#f0f0f5"))
+                    Text("\(w.workoutExercises.count) упражнений")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(hex: "#6b6b80"))
+                }
             }
-            if let w = activeWorkout {
-                Text(w.name.isEmpty ? "Тренировка" : w.name)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color(hex: "#f0f0f5"))
-                Text("\(w.workoutExercises.count) упражнений")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(hex: "#6b6b80"))
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .darkCard(accentBorder: Color(hex: "#ff5c3a").opacity(0.3))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .darkCard(accentBorder: Color(hex: "#ff5c3a").opacity(0.3))
+        .buttonStyle(.plain)
     }
 
     // MARK: - Habits
@@ -293,7 +317,10 @@ struct TodayView: View {
         .padding(14)
         .darkCard()
         .contentShape(Rectangle())
-        .onTapGesture { selectedTab = 2 }
+        .onTapGesture {
+            tasksSection = 0
+            selectedTab = 2
+        }
     }
 
     // MARK: - Todos
@@ -350,7 +377,10 @@ struct TodayView: View {
         .padding(14)
         .darkCard()
         .contentShape(Rectangle())
-        .onTapGesture { selectedTab = 2 }
+        .onTapGesture {
+            tasksSection = 1
+            selectedTab = 2
+        }
     }
 
     // MARK: - Finance
@@ -430,7 +460,10 @@ struct TodayView: View {
                 .padding(14)
                 .darkCard()
                 .contentShape(Rectangle())
-                .onTapGesture { selectedTab = 4 }
+                .onTapGesture {
+                    tasksSection = 2
+                    selectedTab = 2
+                }
             }
         }
     }

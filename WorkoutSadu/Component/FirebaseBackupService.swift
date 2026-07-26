@@ -19,6 +19,13 @@ struct BackupPayload: Codable {
     let weeklyGoals: [BackupWeeklyGoal]
     let bodyProfiles: [BackupBodyProfile]
     let mealEntries: [BackupMealEntry]
+
+    var isEffectivelyEmpty: Bool {
+        exercises.isEmpty && workouts.isEmpty && templates.isEmpty
+            && financeAccounts.isEmpty && financeTransactions.isEmpty
+            && habits.isEmpty && habitEntries.isEmpty && todos.isEmpty
+            && weeklyGoals.isEmpty && bodyProfiles.isEmpty && mealEntries.isEmpty
+    }
 }
 
 struct BackupExercise: Codable {
@@ -150,6 +157,112 @@ struct BackupMealEntry: Codable {
     let mealTypeRaw: String
 }
 
+// MARK: - Payload builder
+
+enum BackupPayloadBuilder {
+    @MainActor
+    static func build(context: ModelContext) throws -> (payload: BackupPayload, data: Data) {
+        let df = ISO8601DateFormatter()
+        df.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let exportedAt = df.string(from: Date())
+
+        let exercises = (try? context.fetch(FetchDescriptor<Exercise>())) ?? []
+        let workouts = (try? context.fetch(FetchDescriptor<Workout>())) ?? []
+        let templates = (try? context.fetch(FetchDescriptor<WorkoutTemplate>())) ?? []
+        let accounts = (try? context.fetch(FetchDescriptor<FinanceAccount>())) ?? []
+        let transactions = (try? context.fetch(FetchDescriptor<FinanceTransaction>())) ?? []
+        let habits = (try? context.fetch(FetchDescriptor<Habit>())) ?? []
+        let habitEntries = (try? context.fetch(FetchDescriptor<HabitEntry>())) ?? []
+        let todos = (try? context.fetch(FetchDescriptor<TodoItem>())) ?? []
+        let goals = (try? context.fetch(FetchDescriptor<WeeklyGoal>())) ?? []
+        let profiles = (try? context.fetch(FetchDescriptor<BodyProfile>())) ?? []
+        let meals = (try? context.fetch(FetchDescriptor<MealEntry>())) ?? []
+
+        let payload = BackupPayload(
+            version: 1,
+            exportedAt: exportedAt,
+            exercises: exercises.map { BackupExercise(id: $0.id.uuidString, name: $0.name, bodyPart: $0.bodyPart, gifURL: $0.gifURL) },
+            workouts: workouts.map { w in
+                BackupWorkout(
+                    id: w.id.uuidString,
+                    name: w.name,
+                    date: w.date,
+                    startedAt: w.startedAt,
+                    finishedAt: w.finishedAt,
+                    exercises: w.workoutExercises.sorted { $0.order < $1.order }.map { we in
+                        BackupWorkoutExercise(
+                            id: we.id.uuidString,
+                            order: we.order,
+                            exerciseId: we.exercise.id.uuidString,
+                            timerSeconds: we.timerSeconds,
+                            sets: we.workoutSets.sorted { $0.order < $1.order }.map { s in
+                                BackupWorkoutSet(id: s.id.uuidString, order: s.order, reps: s.reps, weight: s.weight, isCompleted: s.isCompleted, completedAt: s.completedAt)
+                            }
+                        )
+                    }
+                )
+            },
+            templates: templates.map { t in
+                BackupTemplate(
+                    id: t.id.uuidString,
+                    name: t.name,
+                    createdAt: t.createdAt,
+                    exercises: t.exercises.sorted { $0.order < $1.order }.map { e in
+                        BackupTemplateExercise(id: e.id.uuidString, order: e.order, exerciseName: e.exerciseName, bodyPart: e.bodyPart, defaultSets: e.defaultSets, defaultReps: e.defaultReps, defaultWeight: e.defaultWeight, timerSeconds: e.timerSeconds)
+                    }
+                )
+            },
+            financeAccounts: accounts.map { a in
+                BackupFinanceAccount(id: a.id.uuidString, name: a.name, balance: a.balance, icon: a.icon, colorHex: a.colorHex, createdAt: a.createdAt)
+            },
+            financeTransactions: transactions.map { t in
+                BackupFinanceTransaction(id: t.id.uuidString, name: t.name, amount: t.amount, categoryRaw: t.categoryRaw, typeRaw: t.typeRaw, date: t.date, accountID: t.accountID?.uuidString)
+            },
+            habits: habits.map { h in
+                BackupHabit(id: h.id.uuidString, name: h.name, icon: h.icon, colorHex: h.colorHex, createdAt: h.createdAt, archived: h.archived)
+            },
+            habitEntries: habitEntries.compactMap { e in
+                guard let hid = e.habit?.id else { return nil }
+                return BackupHabitEntry(id: e.id.uuidString, date: e.date, habitId: hid.uuidString)
+            },
+            todos: todos.map { t in
+                BackupTodo(id: t.id.uuidString, title: t.title, completed: t.completed, dueDate: t.dueDate, createdAt: t.createdAt, priority: t.priority, habitId: t.habit?.id.uuidString)
+            },
+            weeklyGoals: goals.map { g in
+                BackupWeeklyGoal(id: g.id.uuidString, title: g.title, targetCount: g.targetCount, currentCount: g.currentCount, weekStart: g.weekStart, periodRaw: g.periodRaw, createdAt: g.createdAt)
+            },
+            bodyProfiles: profiles.map { p in
+                BackupBodyProfile(weight: p.weight, height: p.height, age: p.effectiveAge, birthDate: p.birthDate, restingHeartRate: p.restingHeartRate, bodyFatPercent: p.bodyFatPercent, goalRaw: p.goalRaw, targetWeightKg: p.targetWeightKg, updatedAt: p.updatedAt)
+            },
+            mealEntries: meals.map { m in
+                BackupMealEntry(id: m.id.uuidString, name: m.name, calories: m.calories, protein: m.protein, fat: m.fat, carbs: m.carbs, grams: m.grams, date: m.date, mealTypeRaw: m.mealTypeRaw)
+            }
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(payload)
+        return (payload, data)
+    }
+
+    /// Декодер, устойчивый к датам с/без дробных секунд.
+    static func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let raw = try container.decode(String.self)
+            let withFractional = ISO8601DateFormatter()
+            withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = withFractional.date(from: raw) { return date }
+            let plain = ISO8601DateFormatter()
+            plain.formatOptions = [.withInternetDateTime]
+            if let date = plain.date(from: raw) { return date }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Bad date: \(raw)")
+        }
+        return decoder
+    }
+}
+
 // MARK: - Service
 
 /// Автоэкспорт данных SwiftData в Firebase Storage раз в 24 часа (при открытии приложения).
@@ -164,14 +277,22 @@ final class FirebaseBackupService {
 
     private init() {}
 
+    var lastExportDate: Date? {
+        UserDefaults.standard.object(forKey: lastExportKey) as? Date
+    }
+
     /// Вызвать при запуске/возврате в приложение. Если прошло ≥24 ч — выполняет экспорт в фоне.
     @MainActor
     func tryExportIfNeeded(context: ModelContext) async {
         guard shouldExport() else { return }
         do {
             try await signInAnonymouslyIfNeeded()
-            let data = try buildBackupPayload(context: context)
-            try await upload(data: data)
+            let built = try BackupPayloadBuilder.build(context: context)
+            guard !built.payload.isEffectivelyEmpty else {
+                print("[FirebaseBackup] Skip auto-export: local database is empty")
+                return
+            }
+            try await upload(data: built.data)
             saveLastExportDate()
         } catch {
             print("[FirebaseBackup] Export failed: \(error.localizedDescription)")
@@ -182,8 +303,15 @@ final class FirebaseBackupService {
     @MainActor
     func forceExport(context: ModelContext) async throws {
         try await signInAnonymouslyIfNeeded()
-        let data = try buildBackupPayload(context: context)
-        try await upload(data: data)
+        let built = try BackupPayloadBuilder.build(context: context)
+        guard !built.payload.isEffectivelyEmpty else {
+            throw NSError(
+                domain: "FirebaseBackup",
+                code: -4,
+                userInfo: [NSLocalizedDescriptionKey: "Нечего сохранять — в приложении нет данных для бэкапа"]
+            )
+        }
+        try await upload(data: built.data)
         saveLastExportDate()
     }
 
@@ -192,10 +320,38 @@ final class FirebaseBackupService {
     func restoreFromBackup(context: ModelContext) async throws {
         try await signInAnonymouslyIfNeeded()
         let data = try await download()
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let payload = try decoder.decode(BackupPayload.self, from: data)
+        try restoreFromBackupData(data, context: context)
+    }
 
+    /// Восстановление из локального JSON (например, скачанного latest.json из Firebase Storage).
+    @MainActor
+    func restoreFromBackupFile(url: URL, context: ModelContext) async throws {
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        let data = try Data(contentsOf: url)
+        try restoreFromBackupData(data, context: context)
+    }
+
+    @MainActor
+    func restoreFromBackupData(_ data: Data, context: ModelContext) throws {
+        let payload = try BackupPayloadBuilder.makeDecoder().decode(BackupPayload.self, from: data)
+
+        guard !payload.workouts.isEmpty || !payload.exercises.isEmpty || !payload.templates.isEmpty
+                || !payload.financeTransactions.isEmpty || !payload.habits.isEmpty || !payload.todos.isEmpty
+                || !payload.bodyProfiles.isEmpty || !payload.mealEntries.isEmpty
+        else {
+            throw NSError(
+                domain: "FirebaseBackup",
+                code: -3,
+                userInfo: [NSLocalizedDescriptionKey: "Файл бэкапа пустой — в нём нет данных для восстановления"]
+            )
+        }
+
+        try applyBackupPayload(payload, context: context)
+    }
+
+    @MainActor
+    private func applyBackupPayload(_ payload: BackupPayload, context: ModelContext) throws {
         // 1. Clear current data
         let models: [any PersistentModel.Type] = [
             Exercise.self, Workout.self, WorkoutExercise.self, WorkoutSet.self,
@@ -360,89 +516,6 @@ final class FirebaseBackupService {
     private func signInAnonymouslyIfNeeded() async throws {
         if Auth.auth().currentUser != nil { return }
         _ = try await Auth.auth().signInAnonymously()
-    }
-
-    private func buildBackupPayload(context: ModelContext) throws -> Data {
-        let df = ISO8601DateFormatter()
-        df.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let exportedAt = df.string(from: Date())
-
-        let exercises = (try? context.fetch(FetchDescriptor<Exercise>())) ?? []
-        let workouts = (try? context.fetch(FetchDescriptor<Workout>())) ?? []
-        let templates = (try? context.fetch(FetchDescriptor<WorkoutTemplate>())) ?? []
-        let accounts = (try? context.fetch(FetchDescriptor<FinanceAccount>())) ?? []
-        let transactions = (try? context.fetch(FetchDescriptor<FinanceTransaction>())) ?? []
-        let habits = (try? context.fetch(FetchDescriptor<Habit>())) ?? []
-        let habitEntries = (try? context.fetch(FetchDescriptor<HabitEntry>())) ?? []
-        let todos = (try? context.fetch(FetchDescriptor<TodoItem>())) ?? []
-        let goals = (try? context.fetch(FetchDescriptor<WeeklyGoal>())) ?? []
-        let profiles = (try? context.fetch(FetchDescriptor<BodyProfile>())) ?? []
-        let meals = (try? context.fetch(FetchDescriptor<MealEntry>())) ?? []
-
-        let payload = BackupPayload(
-            version: 1,
-            exportedAt: exportedAt,
-            exercises: exercises.map { BackupExercise(id: $0.id.uuidString, name: $0.name, bodyPart: $0.bodyPart, gifURL: $0.gifURL) },
-            workouts: workouts.map { w in
-                BackupWorkout(
-                    id: w.id.uuidString,
-                    name: w.name,
-                    date: w.date,
-                    startedAt: w.startedAt,
-                    finishedAt: w.finishedAt,
-                    exercises: w.workoutExercises.sorted { $0.order < $1.order }.map { we in
-                        BackupWorkoutExercise(
-                            id: we.id.uuidString,
-                            order: we.order,
-                            exerciseId: we.exercise.id.uuidString,
-                            timerSeconds: we.timerSeconds,
-                            sets: we.workoutSets.sorted { $0.order < $1.order }.map { s in
-                                BackupWorkoutSet(id: s.id.uuidString, order: s.order, reps: s.reps, weight: s.weight, isCompleted: s.isCompleted, completedAt: s.completedAt)
-                            }
-                        )
-                    }
-                )
-            },
-            templates: templates.map { t in
-                BackupTemplate(
-                    id: t.id.uuidString,
-                    name: t.name,
-                    createdAt: t.createdAt,
-                    exercises: t.exercises.sorted { $0.order < $1.order }.map { e in
-                        BackupTemplateExercise(id: e.id.uuidString, order: e.order, exerciseName: e.exerciseName, bodyPart: e.bodyPart, defaultSets: e.defaultSets, defaultReps: e.defaultReps, defaultWeight: e.defaultWeight, timerSeconds: e.timerSeconds)
-                    }
-                )
-            },
-            financeAccounts: accounts.map { a in
-                BackupFinanceAccount(id: a.id.uuidString, name: a.name, balance: a.balance, icon: a.icon, colorHex: a.colorHex, createdAt: a.createdAt)
-            },
-            financeTransactions: transactions.map { t in
-                BackupFinanceTransaction(id: t.id.uuidString, name: t.name, amount: t.amount, categoryRaw: t.categoryRaw, typeRaw: t.typeRaw, date: t.date, accountID: t.accountID?.uuidString)
-            },
-            habits: habits.map { h in
-                BackupHabit(id: h.id.uuidString, name: h.name, icon: h.icon, colorHex: h.colorHex, createdAt: h.createdAt, archived: h.archived)
-            },
-            habitEntries: habitEntries.compactMap { e in
-                guard let hid = e.habit?.id else { return nil }
-                return BackupHabitEntry(id: e.id.uuidString, date: e.date, habitId: hid.uuidString)
-            },
-            todos: todos.map { t in
-                BackupTodo(id: t.id.uuidString, title: t.title, completed: t.completed, dueDate: t.dueDate, createdAt: t.createdAt, priority: t.priority, habitId: t.habit?.id.uuidString)
-            },
-            weeklyGoals: goals.map { g in
-                BackupWeeklyGoal(id: g.id.uuidString, title: g.title, targetCount: g.targetCount, currentCount: g.currentCount, weekStart: g.weekStart, periodRaw: g.periodRaw, createdAt: g.createdAt)
-            },
-            bodyProfiles: profiles.map { p in
-                BackupBodyProfile(weight: p.weight, height: p.height, age: p.effectiveAge, birthDate: p.birthDate, restingHeartRate: p.restingHeartRate, bodyFatPercent: p.bodyFatPercent, goalRaw: p.goalRaw, targetWeightKg: p.targetWeightKg, updatedAt: p.updatedAt)
-            },
-            mealEntries: meals.map { m in
-                BackupMealEntry(id: m.id.uuidString, name: m.name, calories: m.calories, protein: m.protein, fat: m.fat, carbs: m.carbs, grams: m.grams, date: m.date, mealTypeRaw: m.mealTypeRaw)
-            }
-        )
-
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        return try encoder.encode(payload)
     }
 
     private func upload(data: Data) async throws {

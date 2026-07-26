@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import Charts
+import UniformTypeIdentifiers
 
 struct BodyProfileView: View {
     @Environment(\.modelContext) private var context
@@ -18,11 +19,21 @@ struct BodyProfileView: View {
     @State private var showAddWeight = false
     @State private var isRestoring = false
     @State private var restoreError: String?
+    @State private var restoreSuccessMessage: String?
+    @State private var showBackupImporter = false
+    @State private var pendingBackupURL: URL?
 
     enum DataCleanAction: Identifiable {
-        case workouts, exercises, templates, everything, restore
+        case workouts, exercises, templates, everything, restore, exportCloud, importFile, exportHome
         var id: Int { hashValue }
     }
+
+    @State private var homeBackupEnabled = HomeBackupService.shared.isEnabled
+    @State private var homeLanURL = HomeBackupService.shared.lanBaseURL
+    @State private var homeTailscaleURL = HomeBackupService.shared.tailscaleBaseURL
+    @State private var homeToken = HomeBackupService.shared.token
+    @State private var homeLastSuccessTick = 0
+    @AppStorage("userDisplayName") private var userDisplayName = ""
 
     private var profile: BodyProfile? { profiles.first }
 
@@ -32,6 +43,7 @@ struct BodyProfileView: View {
                 Color(hex: "#0e0e12").ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: 14) {
+                        displayNameCard
                         // Profile card
                         if let p = profile {
                             profileCard(p)
@@ -43,6 +55,7 @@ struct BodyProfileView: View {
                         healthKitSyncCard
                         // Data management
                         dataManagementCard
+                        homeBackupCard
                     }
                     .dismissKeyboardOnTap()
                     .padding(16)
@@ -81,13 +94,51 @@ struct BodyProfileView: View {
                 Button("Отмена", role: .cancel) { newWeightText = "" }
             } message: { Text("Введите текущий вес в кг") }
             .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirmAction != nil }, set: { if !$0 { confirmAction = nil } }), titleVisibility: .visible) {
-                Button("Удалить", role: .destructive) {
+                Button(confirmActionButtonTitle, role: confirmActionIsDestructive ? .destructive : nil) {
                     if let a = confirmAction { performClean(a); confirmAction = nil }
                 }
                 Button("Отмена", role: .cancel) { confirmAction = nil }
             } message: { Text(confirmMessage) }
+            .fileImporter(
+                isPresented: $showBackupImporter,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    guard let url = urls.first else { return }
+                    pendingBackupURL = url
+                    confirmAction = .importFile
+                case .failure(let error):
+                    restoreError = error.localizedDescription
+                }
+            }
+            .alert("Готово", isPresented: Binding(get: { restoreSuccessMessage != nil }, set: { if !$0 { restoreSuccessMessage = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                if let msg = restoreSuccessMessage { Text(msg) }
+            }
         }
         .preferredColorScheme(.dark)
+    }
+
+    // MARK: - Display name
+
+    private var displayNameCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("ИМЯ")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color(hex: "#6b6b80"))
+                .tracking(1)
+            TextField("Как к тебе обращаться", text: $userDisplayName)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color(hex: "#f0f0f5"))
+                .textInputAutocapitalization(.words)
+                .submitLabel(.done)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .darkCard()
     }
 
     private func profileCard(_ p: BodyProfile) -> some View {
@@ -112,6 +163,7 @@ struct BodyProfileView: View {
                 infoCell("Вес", p.weight > 0 ? String(format: "%.1f кг", p.weight) : "—")
                 infoCell("Рост", p.height > 0 ? String(format: "%.0f см", p.height) : "—")
                 infoCell("Возраст", p.effectiveAge > 0 ? "\(p.effectiveAge) лет" : "—")
+                infoCell("Пол", p.gender.title)
                 infoCell("ЧСС покоя", p.restingHeartRate > 0 ? "\(p.restingHeartRate) уд/мин" : "—")
             }
             if let goal = p.goal {
@@ -275,6 +327,37 @@ struct BodyProfileView: View {
             }
             Divider().padding(.leading, 16)
 
+            Button {
+                confirmAction = .exportCloud
+            } label: {
+                HStack {
+                    Image(systemName: "icloud.and.arrow.up").foregroundStyle(Color(hex: "#ffb830"))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Сохранить в облако").font(.system(size: 14, weight: .medium)).foregroundStyle(Color(hex: "#ffb830"))
+                        if let date = FirebaseBackupService.shared.lastExportDate {
+                            Text("Последний бэкап: \(date.formatted(date: .abbreviated, time: .shortened))")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color(hex: "#6b6b80"))
+                        }
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
+            }
+            Divider().padding(.leading, 16)
+
+            Button {
+                showBackupImporter = true
+            } label: {
+                HStack {
+                    Image(systemName: "doc.badge.arrow.up").foregroundStyle(Color(hex: "#3aff9e"))
+                    Text("Импорт из файла").font(.system(size: 14, weight: .medium)).foregroundStyle(Color(hex: "#3aff9e"))
+                    Spacer()
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
+            }
+            Divider().padding(.leading, 16)
+
             deleteRow("Удалить все тренировки", count: workouts.count) { confirmAction = .workouts }
             Divider().padding(.leading, 16)
             deleteRow("Удалить все упражнения", count: exercises.count) { confirmAction = .exercises }
@@ -298,6 +381,93 @@ struct BodyProfileView: View {
         }
     }
 
+    private var homeBackupCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("RASPBERRY PI")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color(hex: "#6b6b80"))
+                .tracking(1)
+
+            Toggle("Бэкап на Raspberry Pi", isOn: $homeBackupEnabled)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color(hex: "#f0f0f5"))
+                .tint(Color(hex: "#ff5c3a"))
+                .onChange(of: homeBackupEnabled) { _, v in
+                    HomeBackupService.shared.isEnabled = v
+                    if v { HomeBackupService.scheduleNextBGTask() }
+                }
+
+            Text("Автоночью (~03:00) только по домашней Wi‑Fi. Если не достучались — уведомление включить Tailscale и сохранить вручную.")
+                .font(.system(size: 11))
+                .foregroundStyle(Color(hex: "#6b6b80"))
+
+            labeledField("LAN URL", text: $homeLanURL, placeholder: "http://192.168.10.30:8787")
+                .onChange(of: homeLanURL) { _, v in HomeBackupService.shared.lanBaseURL = v }
+
+            labeledField("Tailscale URL", text: $homeTailscaleURL, placeholder: "http://100.99.85.87:8787")
+                .onChange(of: homeTailscaleURL) { _, v in HomeBackupService.shared.tailscaleBaseURL = v }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("ТОКЕН")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color(hex: "#6b6b80"))
+                    .tracking(1)
+                SecureField("BACKUP_TOKEN", text: $homeToken)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color(hex: "#f0f0f5"))
+                    .padding(12)
+                    .background(Color(hex: "#1a1a22"))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .onChange(of: homeToken) { _, v in HomeBackupService.shared.token = v }
+            }
+
+            Button {
+                confirmAction = .exportHome
+            } label: {
+                HStack {
+                    Image(systemName: "externaldrive.badge.plus").foregroundStyle(Color(hex: "#5b8cff"))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Сохранить на Raspberry Pi")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(Color(hex: "#5b8cff"))
+                        if let date = HomeBackupService.shared.lastSuccessDate {
+                            Text("Последний: \(date.formatted(date: .abbreviated, time: .shortened))")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color(hex: "#6b6b80"))
+                                .id(homeLastSuccessTick)
+                        }
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+            .disabled(isRestoring)
+        }
+        .padding(18)
+        .darkCard()
+    }
+
+    private func labeledField(_ title: String, text: Binding<String>, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color(hex: "#6b6b80"))
+                .tracking(1)
+            TextField(placeholder, text: text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+                .font(.system(size: 14))
+                .foregroundStyle(Color(hex: "#f0f0f5"))
+                .padding(12)
+                .background(Color(hex: "#1a1a22"))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
     private func deleteRow(_ label: String, count: Int, action: @escaping () -> Void) -> some View {
         Button(role: .destructive, action: action) {
             HStack {
@@ -309,6 +479,23 @@ struct BodyProfileView: View {
         }
     }
 
+    private var confirmActionIsDestructive: Bool {
+        switch confirmAction {
+        case .workouts, .exercises, .templates, .everything, .restore, .importFile: return true
+        default: return false
+        }
+    }
+
+    private var confirmActionButtonTitle: String {
+        switch confirmAction {
+        case .restore: return "Восстановить"
+        case .exportCloud, .exportHome: return "Сохранить"
+        case .importFile: return "Импортировать"
+        case .workouts, .exercises, .templates, .everything: return "Удалить"
+        case nil: return "OK"
+        }
+    }
+
     private var confirmTitle: String {
         switch confirmAction {
         case .workouts: return "Удалить все тренировки?"
@@ -316,6 +503,9 @@ struct BodyProfileView: View {
         case .templates: return "Удалить все шаблоны?"
         case .everything: return "Сбросить всё?"
         case .restore: return "Восстановить из облака?"
+        case .exportCloud: return "Сохранить в облако?"
+        case .importFile: return "Импортировать бэкап?"
+        case .exportHome: return "Сохранить на Raspberry Pi?"
         case nil: return ""
         }
     }
@@ -326,6 +516,9 @@ struct BodyProfileView: View {
         case .templates: return "Будет удалено \(templates.count) шаблонов."
         case .everything: return "Все тренировки, упражнения и шаблоны будут удалены. Профиль сохранится."
         case .restore: return "Текущие данные будут полностью заменены данными из Firebase. Это нельзя отменить."
+        case .exportCloud: return "Текущие тренировки, упражнения и остальные данные будут загружены в Firebase Storage (latest.json)."
+        case .importFile: return "Текущие данные будут полностью заменены данными из выбранного latest.json. Это нельзя отменить."
+        case .exportHome: return "Сначала попытка по домашней Wi‑Fi, если не получится — через Tailscale URL."
         case nil: return ""
         }
     }
@@ -340,13 +533,52 @@ struct BodyProfileView: View {
                 isRestoring = true
                 do {
                     try await FirebaseBackupService.shared.restoreFromBackup(context: context)
+                    restoreSuccessMessage = "Данные восстановлены из облака"
+                } catch {
+                    restoreError = error.localizedDescription
+                }
+                isRestoring = false
+            }
+        case .exportCloud:
+            Task {
+                isRestoring = true
+                do {
+                    try await FirebaseBackupService.shared.forceExport(context: context)
+                    restoreSuccessMessage = "Данные сохранены в облако"
+                } catch {
+                    restoreError = error.localizedDescription
+                }
+                isRestoring = false
+            }
+        case .importFile:
+            guard let url = pendingBackupURL else { return }
+            Task {
+                isRestoring = true
+                do {
+                    try await FirebaseBackupService.shared.restoreFromBackupFile(url: url, context: context)
+                    restoreSuccessMessage = "Данные восстановлены из файла"
+                } catch {
+                    restoreError = error.localizedDescription
+                }
+                isRestoring = false
+                pendingBackupURL = nil
+            }
+        case .exportHome:
+            Task {
+                isRestoring = true
+                do {
+                    try await HomeBackupService.shared.forceHomeExport(context: context)
+                    homeLastSuccessTick += 1
+                    restoreSuccessMessage = "Данные сохранены на Raspberry Pi"
                 } catch {
                     restoreError = error.localizedDescription
                 }
                 isRestoring = false
             }
         }
-        try? context.save()
+        if action != .restore && action != .exportCloud && action != .importFile && action != .exportHome {
+            try? context.save()
+        }
     }
     private func bmiColor(_ bmi: Double) -> Color {
         switch bmi {
@@ -377,6 +609,11 @@ struct BodyProfileEditView: View {
                     Section("Основное") {
                         field("Вес (кг)", text: $weightText, keyboard: .decimalPad)
                         field("Рост (см)", text: $heightText, keyboard: .decimalPad)
+                        Picker("Пол", selection: $profile.gender) {
+                            ForEach(Gender.allCases, id: \.self) { g in
+                                Text(g.title).tag(g)
+                            }
+                        }
                     }
                     Section("Возраст") {
                         Picker("Способ", selection: $useBirthDate) {
@@ -406,6 +643,15 @@ struct BodyProfileEditView: View {
                         if profile.suggestedTargetWeight != nil, targetWeightText.isEmpty {
                             Text("Оставь пустым — цель подставится по выбранной цели и росту")
                                 .font(.caption).foregroundStyle(Color(hex: "#6b6b80"))
+                        }
+                    }
+                    Section("Активность") {
+                        Picker("Уровень", selection: $profile.activityLevel) {
+                            Text("Сидячий (1.2)").tag(1.2)
+                            Text("Низкий (1.375)").tag(1.375)
+                            Text("Умеренный (1.55)").tag(1.55)
+                            Text("Высокий (1.725)").tag(1.725)
+                            Text("Экстремальный (1.9)").tag(1.9)
                         }
                     }
                     Section("Сердечно-сосудистая") {

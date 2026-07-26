@@ -121,7 +121,7 @@ struct GamificationManager {
         let startOfWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date())) ?? Date()
         let thisWeekCount = finished.filter { $0.date >= startOfWeek }.count
 
-        // week history (last 7 weeks)
+        // week history (last 6 weeks for UI display)
         var history: [Bool] = []
         for weekOffset in stride(from: -6, through: -1, by: 1) {
             guard let ws = cal.date(byAdding: .weekOfYear, value: weekOffset, to: startOfWeek),
@@ -130,28 +130,37 @@ struct GamificationManager {
             history.append(count >= weeklyGoal)
         }
 
-        // current streak (count consecutive completed weeks going back)
+        // current streak: look back up to 3 years to find the real consecutive count
         var streak = 0
-        for completed in history.reversed() {
-            if completed { streak += 1 } else { break }
+        for weekOffset in stride(from: -1, through: -156, by: -1) {
+            guard let ws = cal.date(byAdding: .weekOfYear, value: weekOffset, to: startOfWeek),
+                  let we = cal.date(byAdding: .weekOfYear, value: weekOffset + 1, to: startOfWeek) else { break }
+            let count = finished.filter { $0.date >= ws && $0.date < we }.count
+            if count >= weeklyGoal { streak += 1 } else { break }
         }
 
-        // record streak
+        // record streak: scan all-time history
+        let oldestWorkout = finished.compactMap { $0.date }.min() ?? startOfWeek
+        let totalWeeks = max(1, cal.dateComponents([.weekOfYear], from: oldestWorkout, to: startOfWeek).weekOfYear ?? 1)
         var maxStreak = 0
         var cur = 0
-        for completed in history {
-            cur = completed ? cur + 1 : 0
+        for weekOffset in stride(from: -totalWeeks, through: -1, by: 1) {
+            guard let ws = cal.date(byAdding: .weekOfYear, value: weekOffset, to: startOfWeek),
+                  let we = cal.date(byAdding: .weekOfYear, value: weekOffset + 1, to: startOfWeek) else { continue }
+            let count = finished.filter { $0.date >= ws && $0.date < we }.count
+            cur = count >= weeklyGoal ? cur + 1 : 0
             maxStreak = max(maxStreak, cur)
         }
-        maxStreak = max(maxStreak, streak)
+        let currentStreak = thisWeekCount >= weeklyGoal ? streak + 1 : streak
+        let recordStreak = max(maxStreak, currentStreak)
 
         // days left in week
         let weekday = cal.component(.weekday, from: Date())
         let daysLeft = max(0, 8 - weekday) // 1=Sun→7, Mon=2→6 days left
 
         return WeeklyStreak(
-            current: streak,
-            record: max(maxStreak, streak),
+            current: currentStreak,
+            record: recordStreak,
             completedThisWeek: thisWeekCount,
             goalPerWeek: weeklyGoal,
             weekHistory: history,

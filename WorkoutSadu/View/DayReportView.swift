@@ -52,7 +52,9 @@ struct DayReportView: View {
             }
             .onAppear {
                 if snapshot == nil {
-                    snapshot = ReportManager.shared.collectDaySnapshot(context: context, date: date)
+                    Task {
+                        snapshot = await ReportManager.shared.collectDaySnapshot(context: context, date: date)
+                    }
                 }
             }
             .onChange(of: snapshot) { _, newSnapshot in
@@ -196,7 +198,9 @@ struct DayReportView: View {
         }
         .sheet(isPresented: $showMoodSheet) {
             MoodEntrySheet(date: date) {
-                snapshot = ReportManager.shared.collectDaySnapshot(context: context, date: date)
+                Task {
+                    snapshot = await ReportManager.shared.collectDaySnapshot(context: context, date: date)
+                }
             }
         }
 
@@ -209,6 +213,14 @@ struct DayReportView: View {
                             .foregroundStyle(Color(hex: "#f0f0f5"))
                     }
                 }
+            }
+        }
+
+        if s.steps > 0 {
+            reportCard(title: "Шаги", icon: "figure.walk", color: Color(hex: "#3aff9e")) {
+                Text("\(s.steps)")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color(hex: "#f0f0f5"))
             }
         }
     }

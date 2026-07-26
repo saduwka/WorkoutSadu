@@ -4,7 +4,7 @@ import UIKit
 
 struct TasksTabView: View {
     @Environment(\.modelContext) private var context
-    @State private var section: Int = 0
+    @Binding var section: Int
 
     var body: some View {
         VStack(spacing: 0) {

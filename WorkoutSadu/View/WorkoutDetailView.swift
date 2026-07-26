@@ -20,7 +20,7 @@ struct WorkoutDetailView: View {
     private func hasPR(_ we: WorkoutExercise) -> Bool {
         guard we.exercise.bodyPart != BodyPart.cardio.rawValue else { return false }
         let max = we.workoutSets.filter(\.isCompleted).map(\.weight).max() ?? 0
-        guard max > 0 else { return false }
+        guard max != 0 else { return false }
         return max >= (PRManager.bestWeight(for: we.exercise, in: context) ?? 0)
     }
 
@@ -257,6 +257,7 @@ struct EditWorkoutTimeSheet: View {
         guard editFinishedAt >= editStartedAt else { return }
         workout.startedAt = editStartedAt
         workout.finishedAt = editFinishedAt
+        workout.date = editStartedAt
 
         if let profile = profiles.first, profile.healthKitEnabled {
             let kcal = CalorieCalculator.burned(workout: workout, profile: profile)
@@ -264,8 +265,8 @@ struct EditWorkoutTimeSheet: View {
         }
 
         try? context.save()
-        WidgetDataManager.sync(context: context)
-        WidgetCenter.shared.reloadAllTimelines()
+        // WidgetDataManager.sync(context: context)
+        // WidgetCenter.shared.reloadAllTimelines()
         dismiss()
     }
 }

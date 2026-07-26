@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 
 struct WorkoutCardView: View {
     let workout: Workout
+    @Query private var profiles: [BodyProfile]
 
     private var dateStr: String {
         let f = DateFormatter()
@@ -49,10 +50,14 @@ struct WorkoutCardView: View {
             if totalSets > 0 {
                 let totalVol = exercises.flatMap { $0.workoutSets }.filter { $0.isCompleted }
                     .reduce(0.0) { $0 + $1.weight * Double($1.reps) }
+                let kcal = CalorieCalculator.burned(workout: workout, profile: profiles.first)
                 HStack(spacing: 14) {
                     statPill(icon: "repeat", value: "\(totalSets) сетов")
                     if totalVol > 0 {
                         statPill(icon: "scalemass.fill", value: formatVol(totalVol))
+                    }
+                    if kcal > 0 {
+                        statPill(icon: "flame.fill", value: "\(kcal) ккал")
                     }
                 }
             }

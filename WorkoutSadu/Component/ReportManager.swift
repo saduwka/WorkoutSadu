@@ -32,6 +32,8 @@ struct DayReportSnapshot: Equatable {
     var goalsList: [(title: String, current: Int, target: Int)]
     var moodRating: Int?
     var moodNote: String
+    var steps: Int
+
 
     var textSummary: String {
         var lines: [String] = []
@@ -55,6 +57,7 @@ struct DayReportSnapshot: Equatable {
         }
         if let r = moodRating { lines.append("Настроение: \(r)/5") }
         if !moodNote.isEmpty { lines.append("Заметка: \(moodNote)") }
+        if steps > 0 { lines.append("Шаги: \(steps)") }
         return lines.joined(separator: "\n")
     }
 
@@ -69,6 +72,7 @@ struct DayReportSnapshot: Equatable {
             && lhs.todosDone == rhs.todosDone && lhs.todosPending == rhs.todosPending && lhs.todoTitles == rhs.todoTitles
             && lhs.goalsList.elementsEqual(rhs.goalsList) { $0.title == $1.title && $0.current == $1.current && $0.target == $1.target }
             && lhs.moodRating == rhs.moodRating && lhs.moodNote == rhs.moodNote
+            && lhs.steps == rhs.steps
     }
 }
 
@@ -205,8 +209,8 @@ final class ReportManager {
     private init() {}
 
     // MARK: - Сбор данных за день
-
-    func collectDaySnapshot(context: ModelContext, date: Date) -> DayReportSnapshot {
+    @MainActor
+    func collectDaySnapshot(context: ModelContext, date: Date) async -> DayReportSnapshot {
         let cal = Calendar.current
         let dayStart = cal.startOfDay(for: date)
 
@@ -226,6 +230,7 @@ final class ReportManager {
         var moodRating: Int?
         var moodNote = ""
         var waterML = 0
+        var steps = 0
         var mealsDetail: [DayReportMealEntry] = []
         var expenseCategories: [(category: String, amount: Int)] = []
         if let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) {
@@ -242,7 +247,14 @@ final class ReportManager {
                 workoutSummary = "\(dayWorkouts.count) трен., \(dayWorkouts.flatMap { $0.workoutExercises.map { $0.exercise.name } }.joined(separator: ", "))"
             }
             let profile = try? context.fetch(FetchDescriptor<BodyProfile>()).first
-            caloriesBurned = CalorieCalculator.burnedOnDay(date, workouts: workouts, profile: profile)
+            if profile?.healthKitEnabled == true {
+                let kcal = await HealthKitManager.shared.fetchActiveEnergyBurned(for: date)
+                caloriesBurned = Int(kcal)
+                let s = await HealthKitManager.shared.fetchSteps(for: date)
+                steps = Int(s)
+            } else {
+                caloriesBurned = CalorieCalculator.burnedOnDay(date, workouts: workouts, profile: profile)
+            }
             calorieTarget = CalorieCalculator.dailyTarget(profile: profile)
         }
 
@@ -314,7 +326,8 @@ final class ReportManager {
             todoTitles: todoTitles,
             goalsList: goalsList,
             moodRating: moodRating,
-            moodNote: moodNote
+            moodNote: moodNote,
+            steps: steps
         )
     }
 

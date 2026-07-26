@@ -18,6 +18,18 @@ enum BodyGoal: String, Codable, CaseIterable {
     }
 }
 
+enum Gender: String, Codable, CaseIterable {
+    case male = "male"
+    case female = "female"
+
+    var title: String {
+        switch self {
+        case .male: return "Мужчина"
+        case .female: return "Женщина"
+        }
+    }
+}
+
 @Model
 final class BodyProfile {
     var weight: Double = 0
@@ -27,6 +39,8 @@ final class BodyProfile {
     var birthDate: Date? = nil
     var restingHeartRate: Int = 0
     var bodyFatPercent: Double? = nil
+    var genderRaw: String? = nil
+    var activityLevelValue: Double? = nil
     /// Цель: похудеть, набрать мышцы, удержать, набрать вес.
     var goalRaw: String = ""
     var healthKitEnabled: Bool = false
@@ -39,6 +53,8 @@ final class BodyProfile {
         birthDate: Date? = nil,
         restingHeartRate: Int = 0,
         bodyFatPercent: Double? = nil,
+        gender: Gender = Gender.male,
+        activityLevel: Double = 1.375,
         goalRaw: String = "",
         targetWeightKg: Double = 0,
         healthKitEnabled: Bool = false
@@ -49,6 +65,8 @@ final class BodyProfile {
         self.birthDate = birthDate
         self.restingHeartRate = restingHeartRate
         self.bodyFatPercent = bodyFatPercent
+        self.genderRaw = gender.rawValue
+        self.activityLevelValue = activityLevel
         self.goalRaw = goalRaw
         self.targetWeightKg = targetWeightKg
         self.healthKitEnabled = healthKitEnabled
@@ -65,6 +83,16 @@ final class BodyProfile {
 
     var goal: BodyGoal? {
         BodyGoal(rawValue: goalRaw)
+    }
+
+    var gender: Gender {
+        get { Gender(rawValue: genderRaw ?? "") ?? .male }
+        set { genderRaw = newValue.rawValue }
+    }
+
+    var activityLevel: Double {
+        get { activityLevelValue ?? 1.375 }
+        set { activityLevelValue = newValue }
     }
 
     // BMI
@@ -94,7 +122,8 @@ final class BodyProfile {
     var idealWeightRange: ClosedRange<Double>? {
         guard height > 0 else { return nil }
         let base = height - 152.4
-        let ideal = 50 + 0.9 * base
+        let baseWeight: Double = (gender == .male) ? 50.0 : 45.5
+        let ideal = baseWeight + 0.9 * base
         return (ideal - 5)...(ideal + 5)
     }
 

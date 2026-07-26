@@ -11,6 +11,7 @@ struct CreateWorkoutView: View {
     @Bindable var workout: Workout
     @State private var showExercisePicker = false
     @State private var showDiscardAlert = false
+    @State private var isEditingExercises = false
     @State private var name: String
     @State private var elapsedSeconds = 0
     @State private var elapsedTimer: Timer?
@@ -47,6 +48,8 @@ struct CreateWorkoutView: View {
                                 workout.startedAt = Date()
                                 workoutStarted = true
                                 startElapsedTimer()
+                                try? context.save()
+                                WatchConnectivityManager.shared.publish(workout: workout)
                             } label: {
                                 HStack {
                                     Spacer()
@@ -82,40 +85,75 @@ struct CreateWorkoutView: View {
                                     .foregroundStyle(Color(hex: "#6b6b80"))
                                     .tracking(1)
                                 Spacer()
+                                if !sortedExercises.isEmpty {
+                                    Button {
+                                        withAnimation { isEditingExercises.toggle() }
+                                    } label: {
+                                        Text(isEditingExercises ? "Готово" : "Изменить")
+                                            .font(.system(size: 13, weight: .medium))
+                                            .foregroundStyle(Color(hex: "#ff5c3a"))
+                                    }
+                                }
                             }
                             .padding(.horizontal, 16)
                             .padding(.top, 14)
                             .padding(.bottom, 8)
 
                             ForEach(sortedExercises) { we in
-                                NavigationLink(destination: ExerciseView(workoutExercise: we)) {
-                                    exerciseRow(we)
-                                }
-                                .buttonStyle(.plain)
-                                .swipeActions(edge: .leading) {
-                                    if we.supersetGroup != nil {
-                                        Button { removeSupersetLink(we) } label: {
-                                            Label("Отвязать", systemImage: "link.badge.plus")
-                                        }.tint(.gray)
-                                    } else {
-                                        Button { linkSuperset(we) } label: {
-                                            Label("Суперсет", systemImage: "link")
-                                        }.tint(.purple)
-                                    }
-                                }
-                                .swipeActions(edge: .trailing) {
-                                    Button(role: .destructive) {
-                                        if let index = workout.workoutExercises.firstIndex(where: { $0.id == we.id }) {
-                                            workout.workoutExercises.remove(at: index)
+                                HStack(spacing: 0) {
+                                    // Кнопка удаления (только в режиме редактирования)
+                                    if isEditingExercises {
+                                        Button {
+                                            withAnimation {
+                                                if let index = workout.workoutExercises.firstIndex(where: { $0.id == we.id }) {
+                                                    workout.workoutExercises.remove(at: index)
+                                                }
+                                                context.delete(we)
+                                            }
+                                        } label: {
+                                            Image(systemName: "minus.circle.fill")
+                                                .font(.system(size: 22))
+                                                .foregroundStyle(Color(hex: "#ff3b30"))
                                         }
-                                        context.delete(we)
-                                    } label: {
-                                        Label("Удалить", systemImage: "trash")
+                                        .buttonStyle(.plain)
+                                        .padding(.leading, 16)
+                                        .transition(.move(edge: .leading).combined(with: .opacity))
+                                    }
+
+                                    if isEditingExercises {
+                                        exerciseRow(we)
+                                    } else {
+                                        NavigationLink(destination: ExerciseView(workoutExercise: we)) {
+                                            exerciseRow(we)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .swipeActions(edge: .leading) {
+                                            if we.supersetGroup != nil {
+                                                Button { removeSupersetLink(we) } label: {
+                                                    Label("Отвязать", systemImage: "link.badge.plus")
+                                                }.tint(.gray)
+                                            } else {
+                                                Button { linkSuperset(we) } label: {
+                                                    Label("Суперсет", systemImage: "link")
+                                                }.tint(.purple)
+                                            }
+                                        }
+                                        .swipeActions(edge: .trailing) {
+                                            Button(role: .destructive) {
+                                                if let index = workout.workoutExercises.firstIndex(where: { $0.id == we.id }) {
+                                                    workout.workoutExercises.remove(at: index)
+                                                }
+                                                context.delete(we)
+                                            } label: {
+                                                Label("Удалить", systemImage: "trash")
+                                            }
+                                        }
                                     }
                                 }
                             }
 
                             Button {
+                                isEditingExercises = false
                                 showExercisePicker = true
                             } label: {
                                 HStack {
@@ -155,17 +193,11 @@ struct CreateWorkoutView: View {
                             let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !t.isEmpty else { return }
                             workout.name = t
-                            workout.date = Date()
-                            workout.finishedAt = Date()
                             stopElapsedTimer()
-
-                            if let profile = profiles.first, profile.healthKitEnabled {
-                                let kcal = CalorieCalculator.burned(workout: workout, profile: profile)
-                                Task { await HealthKitManager.shared.saveWorkout(workout, calories: kcal) }
-                            }
-
-                            WidgetDataManager.sync(context: context)
-                            WidgetCenter.shared.reloadAllTimelines()
+                            TimerManager.shared.stop()
+                            WorkoutSessionActions.finishWorkout(workout, context: context, profiles: profiles)
+                            WatchConnectivityManager.shared.setCurrentExerciseID(nil)
+                            WatchConnectivityManager.shared.publish(workout: nil)
                             dismiss()
                         } label: {
                             Label("Завершить тренировку", systemImage: "checkmark.circle")
@@ -192,13 +224,20 @@ struct CreateWorkoutView: View {
             .alert("Отменить тренировку?", isPresented: $showDiscardAlert) {
                 Button("Отменить", role: .destructive) {
                     stopElapsedTimer()
+                    TimerManager.shared.stop()
                     context.delete(workout)
+                    WatchConnectivityManager.shared.setCurrentExerciseID(nil)
+                    WatchConnectivityManager.shared.publish(workout: nil)
                     dismiss()
                 }
                 Button("Назад", role: .cancel) {}
             } message: { Text("Все данные будут удалены безвозвратно.") }
             .onAppear {
                 if workout.startedAt != nil { workoutStarted = true; startElapsedTimer() }
+                WatchConnectivityManager.shared.publish(workout: workout)
+            }
+            .onChange(of: workout.workoutExercises.count) { _, _ in
+                WatchConnectivityManager.shared.publish(workout: workout)
             }
             .onChange(of: workout.startedAt) { _, newVal in
                 if newVal != nil, !workoutStarted { workoutStarted = true; startElapsedTimer() }
@@ -251,7 +290,7 @@ struct CreateWorkoutView: View {
     private func hasPR(_ we: WorkoutExercise) -> Bool {
         guard we.exercise.bodyPart != BodyPart.cardio.rawValue else { return false }
         let m = we.workoutSets.filter(\.isCompleted).map(\.weight).max() ?? 0
-        guard m > 0 else { return false }
+        guard m != 0 else { return false }
         return m >= (PRManager.bestWeight(for: we.exercise, in: context) ?? 0)
     }
 

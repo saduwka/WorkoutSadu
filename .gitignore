@@ -1,6 +1,7 @@
 # Xcode
 build/
 DerivedData/
+.derivedData*/
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
@@ -26,3 +27,6 @@ Pods/
 # SPM
 .build/
 Package.resolved
+
+# Local tooling (TZ PDF generator)
+.venv_tzpdf/

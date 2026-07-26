@@ -915,7 +915,7 @@ struct AllPRsInlineView: View {
     private var grouped: [(String, [(Exercise, Double)])] {
         let list = exercises.compactMap { ex -> (Exercise, Double)? in
             guard ex.bodyPart != BodyPart.cardio.rawValue,
-                  let best = PRManager.bestWeight(for: ex, in: context), best > 0 else { return nil }
+                  let best = PRManager.bestWeight(for: ex, in: context), best != 0 else { return nil }
             return (ex, best)
         }.sorted { $0.1 > $1.1 }
         return Dictionary(grouping: list, by: { $0.0.bodyPart })

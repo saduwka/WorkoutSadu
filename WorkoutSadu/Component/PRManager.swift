@@ -35,7 +35,7 @@ struct PRManager {
         exercise: Exercise,
         in context: ModelContext
     ) -> PRResult? {
-        guard set.isCompleted, set.weight > 0 else { return nil }
+        guard set.isCompleted, set.weight != 0 else { return nil }
 
         let exerciseID = exercise.id
         let predicate = #Predicate<WorkoutExercise> { $0.exercise.id == exerciseID }
@@ -87,6 +87,48 @@ struct PRManager {
             .max()
 
         return max
+    }
+
+    // Average weight from working sets (≥70% of session max) across last 5 sessions.
+    static func workingWeight(for exercise: Exercise, in context: ModelContext) -> (weight: Double, reps: Int)? {
+        let exerciseID = exercise.id
+        let predicate = #Predicate<WorkoutExercise> { $0.exercise.id == exerciseID }
+        let descriptor = FetchDescriptor(predicate: predicate)
+        guard let allWE = try? context.fetch(descriptor) else { return nil }
+
+        let sessions = allWE
+            .compactMap { we -> (WorkoutExercise, Date)? in
+                guard let d = we.workout?.date else { return nil }
+                return (we, d)
+            }
+            .sorted { $0.1 > $1.1 }
+            .prefix(5)
+
+        var workingSets: [(weight: Double, reps: Int)] = []
+
+        for (we, _) in sessions {
+            let completed = we.workoutSets.filter { $0.isCompleted && $0.weight != 0 }
+            guard !completed.isEmpty else { continue }
+            let sessionMax = completed.map(\.weight).max() ?? 0
+            // Симметричный порог 70%: для положительного веса сужает диапазон к максимуму,
+            // для отрицательного (ассистированные упражнения) корректно расширяется в минус.
+            let threshold = sessionMax - abs(sessionMax) * 0.3
+            for s in completed where s.weight >= threshold {
+                workingSets.append((s.weight, s.reps))
+            }
+        }
+
+        guard !workingSets.isEmpty else { return nil }
+
+        // Most frequently used weight (mode); on tie — pick the heavier one
+        let weightFrequency = Dictionary(workingSets.map { ($0.weight, 1) }, uniquingKeysWith: +)
+        guard let modeWeight = weightFrequency.max(by: {
+            $0.value < $1.value || ($0.value == $1.value && $0.key < $1.key)
+        })?.key else { return nil }
+
+        let repsAtMode = workingSets.filter { $0.weight == modeWeight }.map(\.reps)
+        let avgReps = Int((Double(repsAtMode.reduce(0, +)) / Double(repsAtMode.count)).rounded())
+        return (modeWeight, avgReps)
     }
 
     static func prDetail(for exercise: Exercise, in context: ModelContext) -> PRDetailInfo? {

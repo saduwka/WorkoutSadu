@@ -16,6 +16,8 @@ class HealthKitManager {
 
         let typesToShare: Set<HKSampleType> = [
             HKObjectType.workoutType(),
+            HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
+            HKObjectType.quantityType(forIdentifier: .stepCount)!,
             HKObjectType.quantityType(forIdentifier: .dietaryEnergyConsumed)!,
             HKObjectType.quantityType(forIdentifier: .dietaryProtein)!,
             HKObjectType.quantityType(forIdentifier: .dietaryFatTotal)!,
@@ -148,10 +150,12 @@ class HealthKitManager {
         let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay)!
         let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
         
+        print("📊 HealthKit: Fetching active energy for \(date)")
         return await withCheckedContinuation { continuation in
             let query = HKStatisticsQuery(quantityType: energyType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, _ in
                 let sum = result?.sumQuantity()
                 let kcal = sum?.doubleValue(for: HKUnit.kilocalorie()) ?? 0
+                print("🍎 HealthKit Active Energy result: \(kcal) kcal")
                 continuation.resume(returning: kcal)
             }
             healthStore.execute(query)

@@ -4,6 +4,7 @@ import UserNotifications
 import FirebaseCore
 import WidgetKit
 import CoreFoundation
+import BackgroundTasks
 
 private let receiptSavedDarwinName = "com.saduwka.WorkoutSadu.receiptSaved"
 
@@ -14,15 +15,17 @@ private func receiptSavedDarwinCallback(
     _ object: UnsafeRawPointer?,
     _ userInfo: CFDictionary?
 ) {
-    DispatchQueue.main.async {
-        WidgetCenter.shared.reloadAllTimelines()
-    }
+    // Reload UI if needed
 }
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        print("🚀 AppDelegate: didFinishLaunching start")
         FirebaseApp.configure()
+        print("🔥 Firebase configured")
+        HomeBackupService.registerBGTask()
+        HomeBackupService.scheduleNextBGTask()
         ReportManager.shared.scheduleAllReportNotifications()
         NutritionReminderService.scheduleRecurringReminders()
         CFNotificationCenterAddObserver(
@@ -33,6 +36,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             nil,
             .deliverImmediately
         )
+        print("🚀 AppDelegate: didFinishLaunching end")
         return true
     }
 }
@@ -45,6 +49,7 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationDelegate()
     static var pendingGymBroOpen = false
     static var pendingNutritionOpen = false
+    static var pendingHomeBackupOpen = false
     /// По тапу на отчёт: открыть полноценный отчёт (день/неделя/месяц).
     static var pendingReportType: String?
     static var pendingReportDate: Date?
@@ -53,11 +58,32 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         saveNotificationToHistory(content: notification.request.content)
-        completionHandler([.banner, .sound])
+        if notification.request.identifier == "rest-timer-done" {
+            completionHandler([.banner])
+        } else {
+            completionHandler([.banner, .sound])
+        }
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
-        let userInfo = response.notification.request.content.userInfo
+        let request = response.notification.request
+        if request.identifier == TimerManager.notificationID
+            || request.content.categoryIdentifier == TimerManager.notificationCategoryID {
+            let action = response.actionIdentifier
+            // Стоп по кнопке / свайпу. Тап по телу уведомления тоже глушит,
+            // но система может открыть приложение — для «не открывать» жми «Отключить».
+            if action == TimerManager.dismissActionID
+                || action == UNNotificationDefaultActionIdentifier
+                || action == UNNotificationDismissActionIdentifier {
+                DispatchQueue.main.async {
+                    TimerManager.shared.stop()
+                }
+            }
+            completionHandler()
+            return
+        }
+
+        let userInfo = request.content.userInfo
         let type = userInfo["type"] as? String
         if type == "gymBroComment" {
             Self.pendingGymBroOpen = true
@@ -79,6 +105,8 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
                 break
             }
             Self.pendingReportType = type
+        } else if type == "homeBackupFailed" {
+            Self.pendingHomeBackupOpen = true
         }
         saveNotificationToHistory(content: response.notification.request.content)
         completionHandler()
@@ -99,26 +127,33 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     }
 }
 
-struct WidgetSyncModifier: ViewModifier {
+struct FirebaseSyncModifier: ViewModifier {
     @Environment(\.modelContext) private var context
+    @Query private var profiles: [BodyProfile]
 
     func body(content: Content) -> some View {
         content
             .onAppear {
                 NotificationDelegate.shared.modelContext = context
+                WatchConnectivityManager.shared.configure(context: context)
+                WatchConnectivityManager.shared.updateProfiles(profiles)
+                WatchConnectivityManager.shared.republishActiveWorkout()
+            }
+            .onChange(of: profiles.count) { _, _ in
+                WatchConnectivityManager.shared.updateProfiles(profiles)
             }
             .task {
-                WidgetDataManager.sync(context: context)
-                WidgetCenter.shared.reloadAllTimelines()
                 await FirebaseBackupService.shared.tryExportIfNeeded(context: context)
+                await HomeBackupService.shared.tryHomeExportIfNeeded(context: context)
+                HomeBackupService.scheduleNextBGTask()
                 NutritionReminderService.checkAndSchedule(context: context)
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-                WidgetDataManager.sync(context: context)
-                WidgetCenter.shared.reloadAllTimelines()
                 NutritionReminderService.checkAndSchedule(context: context)
                 Task { @MainActor in
                     await FirebaseBackupService.shared.tryExportIfNeeded(context: context)
+                    await HomeBackupService.shared.tryHomeExportIfNeeded(context: context)
+                    HomeBackupService.scheduleNextBGTask()
                 }
             }
     }
@@ -150,18 +185,41 @@ struct ReportFromNotificationContainerView: View {
     }
 }
 
+private func registerRestTimerNotificationCategory() {
+    // Без .foreground — «Отключить» глушит таймер в фоне и не открывает приложение
+    // (как стоп у системного таймера на часах, чтобы не выкидывать из «Тренировка»).
+    let dismiss = UNNotificationAction(
+        identifier: TimerManager.dismissActionID,
+        title: "Отключить",
+        options: []
+    )
+    let category = UNNotificationCategory(
+        identifier: TimerManager.notificationCategoryID,
+        actions: [dismiss],
+        intentIdentifiers: [],
+        options: [.customDismissAction]
+    )
+    UNUserNotificationCenter.current().setNotificationCategories([category])
+}
+
 @main
 struct WorkoutApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @State private var selectedTab = 0
+    @State private var tasksSection = 0
     @State private var gymBroManager = GymBroManager()
     @State private var showReportFromNotification = false
     @State private var reportFromNotificationType: String?
     @State private var reportFromNotificationDate: Date?
+    @AppStorage("userDisplayName") private var userDisplayName = ""
+    @State private var showLaunchWelcome = true
 
     init() {
+        print("📱 WorkoutApp: init start")
         UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
+        registerRestTimerNotificationCategory()
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        print("🔔 Notifications authorized")
 
         let tabBarAppearance = UITabBarAppearance()
         tabBarAppearance.configureWithOpaqueBackground()
@@ -189,7 +247,7 @@ struct WorkoutApp: App {
         WindowGroup {
             ZStack(alignment: .bottomTrailing) {
                 TabView(selection: $selectedTab) {
-                    TodayView(selectedTab: $selectedTab)
+                    TodayView(selectedTab: $selectedTab, tasksSection: $tasksSection)
                         .tabItem { Label("Сегодня", systemImage: "sun.max.fill") }
                         .tag(0)
 
@@ -197,7 +255,7 @@ struct WorkoutApp: App {
                         .tabItem { Label("Здоровье", systemImage: "heart.fill") }
                         .tag(1)
 
-                    TasksTabView()
+                    TasksTabView(section: $tasksSection)
                         .tabItem { Label("Задачи", systemImage: "checklist") }
                         .tag(2)
 
@@ -212,9 +270,24 @@ struct WorkoutApp: App {
                 .preferredColorScheme(.dark)
 
                 GymBroOverlay()
+
+                if showLaunchWelcome {
+                    LaunchWelcomeView(userName: userDisplayName)
+                        .transition(.opacity)
+                        .zIndex(10)
+                }
+            }
+            .task {
+                try? await Task.sleep(for: .seconds(1.8))
+                withAnimation(.easeInOut(duration: 0.45)) {
+                    showLaunchWelcome = false
+                }
+            }
+            .onAppear {
+                print("✅ App successfully launched and appeared")
             }
             .environment(gymBroManager)
-            .modifier(WidgetSyncModifier())
+            .modifier(FirebaseSyncModifier())
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                 if let t = NotificationDelegate.pendingReportType, let d = NotificationDelegate.pendingReportDate {
                     reportFromNotificationType = t
@@ -224,6 +297,9 @@ struct WorkoutApp: App {
                 } else if NotificationDelegate.pendingNutritionOpen {
                     NotificationDelegate.pendingNutritionOpen = false
                     selectedTab = 1
+                } else if NotificationDelegate.pendingHomeBackupOpen {
+                    NotificationDelegate.pendingHomeBackupOpen = false
+                    selectedTab = 4
                 } else if PendingReceiptStorage.hasPendingReceiptFile() {
                     selectedTab = 3
                 }
@@ -253,3 +329,4 @@ struct WorkoutApp: App {
         ])
     }
 }
+  
